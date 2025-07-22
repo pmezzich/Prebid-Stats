@@ -1,0 +1,85 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Prebid Board</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { background: #002b45; color: white; font-family: sans-serif; text-align: center }
+    canvas { max-width: 900px; margin: 2em auto }
+    .legend { display: flex; justify-content: center; gap: 1em; margin-top: 1em }
+    .box { width: 20px; height: 20px; display: inline-block; margin-right: 0.5em }
+  </style>
+</head>
+<body>
+  <h1>Example Visualizations<br><i>Prebid Board</i></h1>
+  <h3 style="color: orange;">Top requester by members & non-members, by year, quarter and month</h3>
+  <canvas id="topRequesters"></canvas>
+  <h3 style="color: orange;">Top Closers by members & non-members, by year, quarter and month</h3>
+  <canvas id="topClosers"></canvas>
+  <div class="legend">
+    <div><span class="box" style="background: orange;"></span>Member</div>
+    <div><span class="box" style="background: cornflowerblue;"></span>Non-member</div>
+  </div>
+
+  
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDqslGsduWEZsf3Z-hKRsBygZ8B9Y9MiVk",
+    authDomain: "prebid-graphs.firebaseapp.com",
+    databaseURL: "https://prebid-graphs-default-rtdb.firebaseio.com",
+    projectId: "prebid-graphs",
+    storageBucket: "prebid-graphs.appspot.com",
+    messagingSenderId: "950794998006",
+    appId: "1:950794998006:web:07f7a6a91a3a39e7869f42"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  const statsRef = ref(db, "stats");
+  get(statsRef).then((snap) => {
+    const data = snap.val();
+    const month = Object.keys(data).pop();
+    const companies = data[month];
+    const labels = Object.keys(companies);
+    const prs = labels.map(k => companies[k].prs);
+    const closers = labels.map(k => companies[k].issues);
+    const colors = labels.map(k => companies[k].member ? "orange" : "cornflowerblue");
+
+    new Chart(document.getElementById("topRequesters"), {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{ label: "PRs", data: prs, backgroundColor: colors }]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        plugins: {
+          legend: { display: false }
+        }
+      }
+    });
+
+    new Chart(document.getElementById("topClosers"), {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{ label: "Issues", data: closers, backgroundColor: colors }]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        plugins: {
+          legend: { display: false }
+        }
+      }
+    });
+  });
+  </script>
+</body>
+</html>
