@@ -1,0 +1,91 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Prebid Engineering</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { background: #002b45; color: white; font-family: sans-serif; text-align: center }
+    canvas { max-width: 900px; margin: 2em auto }
+    .legend { display: flex; justify-content: center; gap: 1em; margin-top: 1em }
+    .box { width: 20px; height: 20px; display: inline-block; margin-right: 0.5em }
+  </style>
+</head>
+<body>
+  <h1>Example Visualizations<br><i>Prebid Engineering</i></h1>
+  <h3 style="color: orange;">Top closer, by year, quarter and month</h3>
+  <canvas id="topCloser"></canvas>
+  <h3 style="color: orange;">Top contributor, by year, quarter and month</h3>
+  <canvas id="topContributor"></canvas>
+  <h3 style="color: orange;">Top by comments, by year, quarter and month</h3>
+  <canvas id="topComments"></canvas>
+  <div class="legend">
+    <div><span class="box" style="background: orange;"></span>Member</div>
+    <div><span class="box" style="background: cornflowerblue;"></span>Non-member</div>
+  </div>
+
+  
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDqslGsduWEZsf3Z-hKRsBygZ8B9Y9MiVk",
+    authDomain: "prebid-graphs.firebaseapp.com",
+    databaseURL: "https://prebid-graphs-default-rtdb.firebaseio.com",
+    projectId: "prebid-graphs",
+    storageBucket: "prebid-graphs.appspot.com",
+    messagingSenderId: "950794998006",
+    appId: "1:950794998006:web:07f7a6a91a3a39e7869f42"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  const statsRef = ref(db, "stats");
+  get(statsRef).then((snap) => {
+    const data = snap.val();
+    const month = Object.keys(data).pop();
+    const companies = data[month];
+    const peopleMap = {};
+
+    for (const [company, value] of Object.entries(companies)) {
+      const people = value.people || {};
+      for (const [person, metrics] of Object.entries(people)) {
+        if (!peopleMap[person]) {
+          peopleMap[person] = { prs: 0, issues: 0, comments: 0, member: value.member };
+        }
+        peopleMap[person].prs += metrics.prs || 0;
+        peopleMap[person].issues += metrics.issues || 0;
+        peopleMap[person].comments += Math.floor(Math.random() * 10); // fake comment data
+      }
+    }
+
+    const sorted = Object.entries(peopleMap).sort((a,b)=>b[1].prs - a[1].prs).slice(0,10);
+    const labels = sorted.map(([user]) => user);
+    const prs = sorted.map(([_, v]) => v.prs);
+    const issues = sorted.map(([_, v]) => v.issues);
+    const comments = sorted.map(([_, v]) => v.comments);
+    const colors = sorted.map(([_, v]) => v.member ? "orange" : "cornflowerblue");
+
+    new Chart(document.getElementById("topContributor"), {
+      type: "bar",
+      data: { labels, datasets: [{ label: "PRs", data: prs, backgroundColor: colors }] },
+      options: { indexAxis: "y", plugins: { legend: { display: false } } }
+    });
+
+    new Chart(document.getElementById("topCloser"), {
+      type: "bar",
+      data: { labels, datasets: [{ label: "Issues", data: issues, backgroundColor: colors }] },
+      options: { indexAxis: "y", plugins: { legend: { display: false } } }
+    });
+
+    new Chart(document.getElementById("topComments"), {
+      type: "bar",
+      data: { labels, datasets: [{ label: "Comments (fake)", data: comments, backgroundColor: colors }] },
+      options: { indexAxis: "y", plugins: { legend: { display: false } } }
+    });
+  });
+  </script>
+</body>
+</html>
