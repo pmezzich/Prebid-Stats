@@ -19,42 +19,83 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
-    const container = document.getElementById("data");
 
-    get(ref(db, "stats")).then((snap) => {
-      const data = snap.val();
-      const month = Object.keys(data).pop();
-      const companies = data[month];
-      let html = "<table><thead><tr><th>Company</th><th>Username</th><th>PRs</th><th>Issues</th><th>Member</th></tr></thead><tbody>";
+    const currentDate = new Date();
+    const monthKey = currentDate.toISOString().slice(0, 7).replace("-", "-");
 
-      for (const [company, info] of Object.entries(companies)) {
-        const people = info.people || {};
-        for (const [person, stats] of Object.entries(people)) {
+    const tableBody = document.getElementById("data-body");
+
+    get(ref(db, 'detailed_stats/' + monthKey)).then(snapshot => {
+      const data = snapshot.val();
+      let html = "";
+      for (const company in data) {
+        const info = data[company];
+        for (const person in info.people) {
+          const stats = info.people[person];
           html += `<tr>
-            <td>{company}</td>
-            <td>{person}</td>
-            <td>{stats.prs}</td>
-            <td>{stats.issues}</td>
-            <td><span class="tag {info.member ? 'member' : 'nonmember'}">{info.member ? 'Member' : 'Non-member'}</span></td>
+            <td>${company}</td>
+            <td>${person}</td>
+            <td>${stats.prs}</td>
+            <td>${stats.issues}</td>
+            <td><span class="tag ${info.member ? 'member' : 'nonmember'}">${info.member ? 'Member' : 'Non-member'}</span></td>
           </tr>`;
         }
       }
-
-      html += "</tbody></table>";
-      container.innerHTML = html;
+      tableBody.innerHTML = html;
     });
   </script>
   <style>
-    body { background: #002b45; color: white; font-family: sans-serif }
-    h1 { text-align: center; margin-top: 1em }
-    table { width: 95%; margin: 2em auto; border-collapse: collapse; background: white; color: black }
-    th, td { padding: 0.5em 1em; border: 1px solid #ccc; text-align: center }
-    .tag.member { background: orange; color: white; padding: 0.2em 0.6em; border-radius: 4px }
-    .tag.nonmember { background: cornflowerblue; color: white; padding: 0.2em 0.6em; border-radius: 4px }
+    body {{
+      font-family: Arial;
+      background: #04314c;
+      color: white;
+      margin: 0;
+      padding: 2em;
+    }}
+    h1, h2 {{
+      text-align: center;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      color: black;
+    }}
+    th, td {{
+      padding: 12px;
+      border: 1px solid #ccc;
+      text-align: left;
+    }}
+    .tag {{
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-weight: bold;
+    }}
+    .member {{
+      background: #f37320;
+      color: white;
+    }}
+    .nonmember {{
+      background: #4169e1;
+      color: white;
+    }}
   </style>
 </head>
 <body>
-  <h1>Example Visualizations<br><i>Prebid PMCs</i></h1>
-  <div id="data"><p style="text-align:center;">Loading table...</p></div>
+  <h1>Example Visualizations<br><em>Prebid PMCs</em></h1>
+  <table>
+    <thead>
+      <tr>
+        <th>Company</th>
+        <th>Username</th>
+        <th>PRs</th>
+        <th>Issues</th>
+        <th>Member</th>
+      </tr>
+    </thead>
+    <tbody id="data-body">
+      <!-- data populated here -->
+    </tbody>
+  </table>
 </body>
 </html>
