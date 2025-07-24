@@ -1,47 +1,30 @@
-
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>engineering</title>
+  <title>Prebid Engineering</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background-color: #062f4f;
+      background-color: #0b2c42;
       color: white;
-      margin: 0;
-      padding: 0;
+      font-family: Arial, sans-serif;
       text-align: center;
     }
-    h1 {
-      margin-top: 20px;
-    }
-    .filters {
-      margin: 20px;
+    canvas {
+      margin: 20px auto;
+      display: block;
+      max-width: 90%;
     }
     select {
-      padding: 5px;
-      margin: 5px;
-    }
-    .chart-container {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-    canvas {
-      width: 600px !important;
-      height: 400px !important;
-      margin: 20px;
+      margin: 10px;
     }
   </style>
 </head>
 <body>
-  <h1>Example Visualizations<br/><em>Prebid Engineering</em></h1>
-  <div class="filters">
-    <label for="timeFilter">Filter by:</label>
-    <select id="timeFilter">
+  <h2>Example Visualizations<br><em>Prebid Engineering</em></h2>
+  <div>
+    Filter by:
+    <select id="dateFilter">
       <option>All Time</option>
     </select>
     <select id="companyFilter">
@@ -51,88 +34,87 @@
       <option>All Names</option>
     </select>
   </div>
-  <div class="chart-container">
-    <canvas id="closersChart"></canvas>
-    <canvas id="contributorsChart"></canvas>
-    <canvas id="commentsChart"></canvas>
-  </div>
+  <canvas id="chart1"></canvas>
+  <canvas id="chart2"></canvas>
+  <canvas id="chart3"></canvas>
 
-  <script>
-    async function loadData() {
-      const res = await fetch("https://prebid-graphs-default-rtdb.firebaseio.com/individuals/2025-07.json");
-      const rawData = await res.json();
-      if (!rawData) return;
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-      const data = Object.entries(rawData).map(([person, info]) => ({
-        name: person,
-        company: info.company || "Unknown",
-        prs: info.prs || 0,
-        issues: info.issues || 0,
-        comments: info.comments || 0,
-        member: info.member
-      }));
+    const firebaseConfig = {
+      apiKey: "AIzaSyDqslGsduWEZsf3Z-hKRsBygZ8B9Y9MiVk",
+      authDomain: "prebid-email-bot.firebaseapp.com",
+      databaseURL: "https://prebid-email-bot-default-rtdb.firebaseio.com",
+      projectId: "prebid-email-bot",
+      storageBucket: "prebid-email-bot.appspot.com",
+      messagingSenderId: "950794998006",
+      appId: "1:950794998006:web:07f7a6a91a3a39e7869f42"
+    };
 
-      const sortedByClosers = [...data].sort((a, b) => b.issues - a.issues).slice(0, 10);
-      const sortedByContributors = [...data].sort((a, b) => b.prs - a.prs).slice(0, 10);
-      const sortedByComments = [...data].sort((a, b) => b.comments - a.comments).slice(0, 10);
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const engRef = ref(db, "engineering");
 
-      function createChart(canvasId, labels, values, colors, title) {
-        new Chart(document.getElementById(canvasId), {
-          type: "bar",
+    onValue(engRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return;
+
+      const entries = [];
+      for (const company in data) {
+        for (const user in data[company]) {
+          const stats = data[company][user];
+          entries.push({
+            name: user,
+            company: company,
+            prs: stats.prs || 0,
+            issues: stats.issues || 0,
+            comments: stats.comments || 0,
+          });
+        }
+      }
+
+      // Sort and render
+      entries.sort((a, b) => b.prs - a.prs);
+      const labels = entries.map(e => `${e.name} (${e.company})`);
+      const prData = entries.map(e => e.prs);
+      const issueData = entries.map(e => e.issues);
+      const commentData = entries.map(e => e.comments);
+
+      const makeChart = (id, label, data) => {
+        new Chart(document.getElementById(id), {
+          type: 'bar',
           data: {
             labels,
             datasets: [{
-              label: title,
-              data: values,
-              backgroundColor: colors
+              label,
+              data,
+              backgroundColor: "#ff7f0e"
             }]
           },
           options: {
-            indexAxis: "y",
+            indexAxis: 'y',
             responsive: true,
             plugins: {
               legend: { display: false },
               title: {
                 display: true,
-                text: title,
-                color: "white",
-                font: { size: 18 }
+                text: label,
+                color: 'white'
               }
             },
             scales: {
-              x: { ticks: { color: "white" }, grid: { color: "#234" } },
-              y: { ticks: { color: "white" }, grid: { color: "#234" } }
+              x: { ticks: { color: "white" }, grid: { color: "#345" } },
+              y: { ticks: { color: "white" }, grid: { color: "#345" } }
             }
           }
         });
-      }
+      };
 
-      createChart(
-        "closersChart",
-        sortedByClosers.map(d => `${d.name} (${d.company})`),
-        sortedByClosers.map(d => d.issues),
-        sortedByClosers.map(d => d.member ? "orange" : "cornflowerblue"),
-        "Top Closers"
-      );
-
-      createChart(
-        "contributorsChart",
-        sortedByContributors.map(d => `${d.name} (${d.company})`),
-        sortedByContributors.map(d => d.prs),
-        sortedByContributors.map(d => d.member ? "orange" : "cornflowerblue"),
-        "Top Contributors"
-      );
-
-      createChart(
-        "commentsChart",
-        sortedByComments.map(d => `${d.name} (${d.company})`),
-        sortedByComments.map(d => d.comments),
-        sortedByComments.map(d => d.member ? "orange" : "cornflowerblue"),
-        "Top by Comments"
-      );
-    }
-
-    loadData();
+      makeChart("chart1", "Top Contributors (PRs)", prData);
+      makeChart("chart2", "Top Closers (Issues)", issueData);
+      makeChart("chart3", "Top by Comments", commentData);
+    });
   </script>
 </body>
 </html>
