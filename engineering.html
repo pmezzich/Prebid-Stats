@@ -1,105 +1,111 @@
 
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Prebid Engineering</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
-      background-color: #052c44;
-      color: white;
       font-family: Arial, sans-serif;
+      background-color: #072d45;
+      color: white;
+      margin: 0;
+      padding: 0;
       text-align: center;
+    }
+    h1 {
+      margin-top: 30px;
+    }
+    .filter-bar {
+      margin: 20px;
+    }
+    .chart-container {
+      width: 90%;
+      max-width: 1000px;
+      margin: 40px auto;
+      background: white;
       padding: 20px;
-    }
-    canvas {
-      background-color: #052c44;
-      margin: 30px auto;
-    }
-    select {
-      margin: 10px;
-      padding: 5px;
-    }
-    .filters {
-      margin: 15px;
+      border-radius: 10px;
     }
   </style>
 </head>
 <body>
-  <h2>Example Visualizations<br><em>Prebid Engineering</em></h2>
-
-  <div class="filters">
-    <label>Filter by:</label>
-    <select id="filter-type">
-      <option value="all">All Time</option>
-      <option value="month">Month</option>
-      <option value="quarter">Quarter</option>
-      <option value="year">Year</option>
+  <h1>Example Visualizations<br><em>Prebid Engineering</em></h1>
+  <div class="filter-bar">
+    Filter by:
+    <select>
+      <option>All Time</option>
+      <option>Past Month</option>
+      <option>Quarter</option>
+      <option>Year</option>
     </select>
-    <select id="company-filter">
-      <option value="all">All Companies</option>
+    <select>
+      <option>All Companies</option>
     </select>
-    <select id="name-filter">
-      <option value="all">All Names</option>
+    <select>
+      <option>All Names</option>
     </select>
   </div>
 
-  <canvas id="topClosers" width="1000" height="500"></canvas>
-  <canvas id="topContributors" width="1000" height="500"></canvas>
-  <canvas id="topComments" width="1000" height="500"></canvas>
+  <div class="chart-container">
+    <canvas id="closersChart"></canvas>
+  </div>
+  <div class="chart-container">
+    <canvas id="contributorsChart"></canvas>
+  </div>
+  <div class="chart-container">
+    <canvas id="commentsChart"></canvas>
+  </div>
 
   <script>
-    async function loadData() {
-      const res = await fetch("https://prebid-graphs-default-rtdb.firebaseio.com/2025-07-individuals.json");
-      const data = await res.json();
+    const firebaseUrl = 'https://prebid-graphs-default-rtdb.firebaseio.com/individuals/2025-07.json';
 
-      let closers = [];
-      let contributors = [];
-      let comments = [];
+    fetch(firebaseUrl)
+      .then(response => response.json())
+      .then(data => {
+        if (!data) return;
 
-      for (const [company, users] of Object.entries(data)) {
-        for (const [person, stats] of Object.entries(users)) {
-          const label = `${person} (${company})`;
-          closers.push({ label, count: stats.closed || 0, member: stats.member });
-          contributors.push({ label, count: stats.prs || 0, member: stats.member });
-          comments.push({ label, count: stats.comments || 0, member: stats.member });
-        }
-      }
+        const entries = Object.entries(data);
+        const closers = entries.map(([name, obj]) => [name, obj.closed || 0]).sort((a,b) => b[1]-a[1]);
+        const contributors = entries.map(([name, obj]) => [name, obj.prs || 0]).sort((a,b) => b[1]-a[1]);
+        const comments = entries.map(([name, obj]) => [name, obj.comments || 0]).sort((a,b) => b[1]-a[1]);
 
-      // Sort each dataset descending
-      closers.sort((a, b) => b.count - a.count);
-      contributors.sort((a, b) => b.count - a.count);
-      comments.sort((a, b) => b.count - a.count);
+        const renderChart = (ctxId, label, values) => {
+          new Chart(document.getElementById(ctxId), {
+            type: 'bar',
+            data: {
+              labels: values.map(e => e[0]),
+              datasets: [{
+                label,
+                data: values.map(e => e[1]),
+                backgroundColor: '#f47c2c'
+              }]
+            },
+            options: {
+              responsive: true,
+              indexAxis: 'y',
+              plugins: {
+                legend: { display: false },
+                title: {
+                  display: true,
+                  text: label,
+                  color: 'black',
+                  font: { size: 18 }
+                }
+              },
+              scales: {
+                x: { ticks: { color: 'black' }, grid: { color: '#ccc' } },
+                y: { ticks: { color: 'black' }, grid: { color: '#ccc' } }
+              }
+            }
+          });
+        };
 
-      const chartConfig = (ctx, title, dataset) => ({
-        type: "bar",
-        data: {
-          labels: dataset.map(d => d.label),
-          datasets: [{
-            label: title,
-            data: dataset.map(d => d.count),
-            backgroundColor: dataset.map(d => d.member ? "#ff7f0e" : "#6495ed")
-          }]
-        },
-        options: {
-          indexAxis: "y",
-          plugins: {
-            legend: { display: false }
-          },
-          responsive: true,
-          scales: {
-            x: { beginAtZero: true }
-          }
-        }
+        renderChart('closersChart', 'Top Closers', closers.slice(0, 15));
+        renderChart('contributorsChart', 'Top Contributors', contributors.slice(0, 15));
+        renderChart('commentsChart', 'Top by Comments', comments.slice(0, 15));
       });
-
-      new Chart(document.getElementById("topClosers").getContext("2d"), chartConfig(null, "PRs Closed", closers));
-      new Chart(document.getElementById("topContributors").getContext("2d"), chartConfig(null, "PRs Opened", contributors));
-      new Chart(document.getElementById("topComments").getContext("2d"), chartConfig(null, "Comments", comments));
-    }
-
-    loadData();
   </script>
 </body>
 </html>
