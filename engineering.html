@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>People View</title>
+  <title>Prebid Engineering - People View</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -15,132 +15,177 @@
       font-family: Arial, sans-serif;
       text-align: center;
     }
+    h1, h2 {
+      margin: 20px 0 10px;
+    }
     canvas {
-      max-width: 90vw;
-      height: 600px !important;
       margin: 30px auto;
+      display: block;
+      width: 90% !important;
+      max-width: 1000px;
+      height: 600px !important;
     }
     select, button {
-      margin: 10px;
+      margin: 0 10px;
       padding: 5px;
     }
   </style>
 </head>
 <body>
-  <h2>Example Visualizations<br><em>Prebid Engineering</em> - People View</h2>
+  <h1>Example Visualizations</h1>
+  <h2><em>Prebid Engineering</em> - People View</h2>
   <div>
-    <label>Filter by:</label>
+    Filter by:
     <select id="dateFilter">
       <option value="all">All Time</option>
+      <option value="month">This Month</option>
+      <option value="quarter">This Quarter</option>
+      <option value="year">This Year</option>
     </select>
     <select id="companyFilter">
       <option value="all">All Companies</option>
     </select>
-    <select id="nameFilter">
+    <select id="personFilter">
       <option value="all">All Names</option>
     </select>
     <button onclick="applyFilters()">Apply Filters</button>
   </div>
-
-  <canvas id="closersChart"></canvas>
-  <canvas id="contributorsChart"></canvas>
-
+  <canvas id="issuesChart"></canvas>
+  <canvas id="prsChart"></canvas>
   <script>
     const firebaseConfig = {
-      apiKey: "AIzaSyB7lPuRWn8oflKZn4nmbdSREz35HaUbFnI",
-      authDomain: "prebid-graphs-default.firebaseapp.com",
-      databaseURL: "https://prebid-graphs-default-rtdb.firebaseio.com",
-      projectId: "prebid-graphs-default",
-      storageBucket: "prebid-graphs-default.appspot.com",
-      messagingSenderId: "277285460770",
-      appId: "1:277285460770:web:0d0a03716ab870c9b330b2"
+      databaseURL: "https://prebid-graphs-default-rtdb.firebaseio.com"
     };
-
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    let rawData = {};
+    let fullData = {};
 
-    function getBarColor(member) {
-      return member ? "orange" : "steelblue";
+    function getCurrentPeriod(key, filter) {
+      const [year, month] = key.split("-");
+      const today = new Date();
+      if (filter === "month") {
+        return key === today.toISOString().slice(0, 7);
+      } else if (filter === "quarter") {
+        const quarter = Math.floor((today.getMonth()) / 3) + 1;
+        const dataQuarter = Math.floor((parseInt(month) - 1) / 3) + 1;
+        return parseInt(year) === today.getFullYear() && quarter === dataQuarter;
+      } else if (filter === "year") {
+        return parseInt(year) === today.getFullYear();
+      }
+      return true;
+    }
+
+    function loadData() {
+      db.ref("stats").once("value", snapshot => {
+        fullData = snapshot.val();
+        populateFilters();
+        applyFilters();
+      });
+    }
+
+    function populateFilters() {
+      const companySet = new Set();
+      const personSet = new Set();
+      for (const month in fullData) {
+        for (const company in fullData[month]) {
+          companySet.add(company);
+          const entry = fullData[month][company];
+          if (entry.people) {
+            for (const person in entry.people) {
+              personSet.add(person);
+            }
+          }
+        }
+      }
+
+      const companyFilter = document.getElementById("companyFilter");
+      const personFilter = document.getElementById("personFilter");
+
+      companySet.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = opt.text = c;
+        companyFilter.appendChild(opt);
+      });
+
+      personSet.forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = opt.text = p;
+        personFilter.appendChild(opt);
+      });
     }
 
     function applyFilters() {
-      drawCharts();
+      const dateFilter = document.getElementById("dateFilter").value;
+      const companyFilter = document.getElementById("companyFilter").value;
+      const personFilter = document.getElementById("personFilter").value;
+
+      const issuesMap = {};
+      const prsMap = {};
+
+      for (const month in fullData) {
+        if (!getCurrentPeriod(month, dateFilter)) continue;
+
+        for (const company in fullData[month]) {
+          if (companyFilter !== "all" && company !== companyFilter) continue;
+          const people = fullData[month][company].people || {};
+          for (const person in people) {
+            if (personFilter !== "all" && person !== personFilter) continue;
+            const data = people[person];
+            issuesMap[`${person} (${company})`] = (issuesMap[`${person} (${company})`] || 0) + (data.issues || 0);
+            prsMap[`${person} (${company})`] = (prsMap[`${person} (${company})`] || 0) + (data.prs || 0);
+          }
+        }
+      }
+
+      renderChart("issuesChart", "Top Closers", issuesMap);
+      renderChart("prsChart", "Top Contributors", prsMap);
     }
 
-    function drawCharts() {
-      const peopleStats = {};
+    function renderChart(canvasId, label, dataMap) {
+      const ctx = document.getElementById(canvasId).getContext("2d");
+      const sorted = Object.entries(dataMap).sort((a, b) => b[1] - a[1]).slice(0, 30);
+      const labels = sorted.map(i => i[0]);
+      const values = sorted.map(i => i[1]);
 
-      Object.entries(rawData).forEach(([month, snapshot]) => {
-        Object.entries(snapshot).forEach(([company, data]) => {
-          if (!data.people) return;
-          Object.entries(data.people).forEach(([name, info]) => {
-            if (!peopleStats[name]) {
-              peopleStats[name] = { prs: 0, issues: 0, member: info.member, company };
-            }
-            peopleStats[name].prs += info.prs || 0;
-            peopleStats[name].issues += info.issues || 0;
-          });
-        });
-      });
+      if (window[canvasId + "_instance"]) {
+        window[canvasId + "_instance"].destroy();
+      }
 
-      const sortedContributors = Object.entries(peopleStats)
-        .sort((a, b) => b[1].prs - a[1].prs).slice(0, 30);
-      const sortedClosers = Object.entries(peopleStats)
-        .sort((a, b) => b[1].issues - a[1].issues).slice(0, 30);
-
-      const contribLabels = sortedContributors.map(([name, val]) => `${name} (${val.company})`);
-      const contribValues = sortedContributors.map(([_, val]) => val.prs);
-      const contribColors = sortedContributors.map(([_, val]) => getBarColor(val.member));
-
-      const closerLabels = sortedClosers.map(([name, val]) => `${name} (${val.company})`);
-      const closerValues = sortedClosers.map(([_, val]) => val.issues);
-      const closerColors = sortedClosers.map(([_, val]) => getBarColor(val.member));
-
-      createChart("contributorsChart", "Top Contributors", contribLabels, contribValues, contribColors);
-      createChart("closersChart", "Top Closers", closerLabels, closerValues, closerColors);
-    }
-
-    function createChart(id, label, labels, data, colors) {
-      const ctx = document.getElementById(id).getContext("2d");
-      if (window[id]) window[id].destroy();
-
-      window[id] = new Chart(ctx, {
+      window[canvasId + "_instance"] = new Chart(ctx, {
         type: "bar",
         data: {
           labels,
           datasets: [{
             label,
-            data,
-            backgroundColor: colors
+            data: values,
+            backgroundColor: "rgba(255, 255, 255, 0.7)"
           }]
         },
         options: {
-          indexAxis: 'y',
+          indexAxis: "y",
           responsive: true,
+		maintainAspectRatio: false,
           maintainAspectRatio: false,
           scales: {
-            x: { beginAtZero: true },
+            x: {
+              beginAtZero: true,
+              ticks: { color: "white" },
+              grid: { color: "gray" }
+            },
             y: {
-              ticks: {
-                color: 'white',
-                font: { size: 12 }
-              }
+              ticks: { color: "white" },
+              grid: { color: "gray" }
             }
           },
           plugins: {
-            legend: { display: false },
-            tooltip: { enabled: true }
+            legend: { labels: { color: "white" } }
           }
         }
       });
     }
 
-    firebase.database().ref("stats").once("value").then(snapshot => {
-      rawData = snapshot.val();
-      drawCharts();
-    });
+    loadData();
   </script>
 </body>
 </html>
