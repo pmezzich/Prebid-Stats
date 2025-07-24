@@ -1,85 +1,94 @@
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8" />
   <title>Prebid Board</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { background: #002b45; color: white; font-family: sans-serif; text-align: center }
-    canvas { max-width: 900px; margin: 2em auto }
-    .legend { display: flex; justify-content: center; gap: 1em; margin-top: 1em }
-    .box { width: 20px; height: 20px; display: inline-block; margin-right: 0.5em }
+    body {
+      background-color: #052c44;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+    canvas {
+      background-color: #052c44;
+      margin: 30px auto;
+    }
+    select {
+      margin: 10px;
+      padding: 5px;
+    }
+    .filters {
+      margin: 15px;
+    }
   </style>
 </head>
 <body>
-  <h1>Example Visualizations<br><i>Prebid Board</i></h1>
-  <h3 style="color: orange;">Top requester by members & non-members, by year, quarter and month</h3>
-  <canvas id="topRequesters"></canvas>
-  <h3 style="color: orange;">Top Closers by members & non-members, by year, quarter and month</h3>
-  <canvas id="topClosers"></canvas>
-  <div class="legend">
-    <div><span class="box" style="background: orange;"></span>Member</div>
-    <div><span class="box" style="background: cornflowerblue;"></span>Non-member</div>
+  <h2>Example Visualizations<br><em>Prebid Board</em></h2>
+
+  <div class="filters">
+    <label>Filter by:</label>
+    <select id="filter-type">
+      <option value="all">All Time</option>
+      <option value="month">Month</option>
+      <option value="quarter">Quarter</option>
+      <option value="year">Year</option>
+    </select>
+    <select id="company-filter">
+      <option value="all">All Companies</option>
+    </select>
   </div>
 
-  
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+  <canvas id="topRequesters" width="1000" height="500"></canvas>
+  <canvas id="topClosers" width="1000" height="500"></canvas>
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyDqslGsduWEZsf3Z-hKRsBygZ8B9Y9MiVk",
-    authDomain: "prebid-graphs.firebaseapp.com",
-    databaseURL: "https://prebid-graphs-default-rtdb.firebaseio.com",
-    projectId: "prebid-graphs",
-    storageBucket: "prebid-graphs.appspot.com",
-    messagingSenderId: "950794998006",
-    appId: "1:950794998006:web:07f7a6a91a3a39e7869f42"
-  };
+  <script>
+    async function loadData() {
+      const res = await fetch("https://prebid-graphs-default-rtdb.firebaseio.com/stats/2025-07.json");
+      const data = await res.json();
 
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
+      let requesters = [];
+      let closers = [];
 
-  const statsRef = ref(db, "stats");
-  get(statsRef).then((snap) => {
-    const data = snap.val();
-    const month = Object.keys(data).pop();
-    const companies = data[month];
-    const labels = Object.keys(companies);
-    const prs = labels.map(k => companies[k].prs);
-    const closers = labels.map(k => companies[k].issues);
-    const colors = labels.map(k => companies[k].member ? "orange" : "cornflowerblue");
-
-    new Chart(document.getElementById("topRequesters"), {
-      type: "bar",
-      data: {
-        labels,
-        datasets: [{ label: "PRs", data: prs, backgroundColor: colors }]
-      },
-      options: {
-        indexAxis: "y",
-        responsive: true,
-        plugins: {
-          legend: { display: false }
-        }
+      for (const [company, stats] of Object.entries(data)) {
+        requesters.push({ label: company, count: stats.prs || 0, member: stats.member });
+        closers.push({ label: company, count: stats.issues || 0, member: stats.member });
       }
-    });
 
-    new Chart(document.getElementById("topClosers"), {
-      type: "bar",
-      data: {
-        labels,
-        datasets: [{ label: "Issues", data: closers, backgroundColor: colors }]
-      },
-      options: {
-        indexAxis: "y",
-        responsive: true,
-        plugins: {
-          legend: { display: false }
+      // Sort descending
+      requesters.sort((a, b) => b.count - a.count);
+      closers.sort((a, b) => b.count - a.count);
+
+      const chartConfig = (ctx, title, dataset) => ({
+        type: "bar",
+        data: {
+          labels: dataset.map(d => d.label),
+          datasets: [{
+            label: title,
+            data: dataset.map(d => d.count),
+            backgroundColor: dataset.map(d => d.member ? "#ff7f0e" : "#6495ed")
+          }]
+        },
+        options: {
+          indexAxis: "y",
+          plugins: {
+            legend: { display: false }
+          },
+          responsive: true,
+          scales: {
+            x: { beginAtZero: true }
+          }
         }
-      }
-    });
-  });
+      });
+
+      new Chart(document.getElementById("topRequesters").getContext("2d"), chartConfig(null, "PRs Opened", requesters));
+      new Chart(document.getElementById("topClosers").getContext("2d"), chartConfig(null, "Issues Closed", closers));
+    }
+
+    loadData();
   </script>
 </body>
 </html>
