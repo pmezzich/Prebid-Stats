@@ -1,171 +1,95 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Prebid Engineering</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
-      background-color: #0b2f46;
+      background-color: #0b2c42;
       color: white;
       font-family: Arial, sans-serif;
       text-align: center;
     }
-    h1, h2 {
-      margin: 10px;
-    }
-    .filters {
-      margin: 20px;
+    canvas {
+      margin: 20px auto;
+      display: block;
+      max-width: 90%;
     }
     select {
-      margin: 0 10px;
-      padding: 5px;
-    }
-    .chart-container {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-    .chart-box {
-      width: 700px;
-      height: 400px;
-      margin: 20px;
+      margin: 10px;
     }
   </style>
 </head>
 <body>
-  <h1>Example Visualizations</h1>
-  <h2><em>Prebid Engineering</em></h2>
-  <div class="filters">
-    <label>Filter by:</label>
-    <select id="timeFilter">
-      <option value="all">All Time</option>
-      <option value="month">This Month</option>
-      <option value="quarter">This Quarter</option>
-      <option value="year">This Year</option>
+  <h2>Example Visualizations<br><em>Prebid Engineering</em></h2>
+  <div>
+    Filter by:
+    <select id="dateFilter">
+      <option>All Time</option>
     </select>
     <select id="companyFilter">
-      <option value="all">All Companies</option>
+      <option>All Companies</option>
     </select>
     <select id="nameFilter">
-      <option value="all">All Names</option>
+      <option>All Names</option>
     </select>
   </div>
-  <div class="chart-container">
-    <div class="chart-box"><canvas id="closersChart"></canvas></div>
-    <div class="chart-box"><canvas id="contributorsChart"></canvas></div>
-    <div class="chart-box"><canvas id="commentsChart"></canvas></div>
-  </div>
+  <canvas id="chart1"></canvas>
+  <canvas id="chart2"></canvas>
+  <canvas id="chart3"></canvas>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+  <script>
+    async function loadData() {
+      const res = await fetch("https://prebid-graphs-default-rtdb.firebaseio.com/engineering.json");
+      const data = await res.json();
 
-    const firebaseConfig = {
-      databaseURL: "https://prebid-graphs-default-rtdb.firebaseio.com/"
-    };
+      const userStats = {};
 
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
+      Object.entries(data || {}).forEach(([company, users]) => {
+        Object.entries(users || {}).forEach(([username, stats]) => {
+          const key = username + " (" + company + ")";
+          userStats[key] = {
+            prs: stats.prs || 0,
+            issues: stats.issues || 0,
+            comments: stats.comments || 0,
+            company: company,
+            name: username
+          };
+        });
+      });
 
-    const timeFilter = document.getElementById("timeFilter");
-    const companyFilter = document.getElementById("companyFilter");
-    const nameFilter = document.getElementById("nameFilter");
+      const names = Object.keys(userStats);
+      const prs = names.map(name => userStats[name].prs);
+      const issues = names.map(name => userStats[name].issues);
+      const comments = names.map(name => userStats[name].comments);
 
-    let allData = [];
+      const colors = names.map(name => userStats[name].member ? "#ff7f0e" : "#1f77b4");
 
-    function updateCharts(filtered) {
-      const byKey = key =>
-        Object.entries(filtered.reduce((acc, d) => {
-          const k = d.person + " (" + d.company + ")";
-          acc[k] = (acc[k] || 0) + (d[key] || 0);
-          return acc;
-        }, {})).sort((a, b) => b[1] - a[1]);
-
-      const labels = byKey("closed").map(e => e[0]);
-      const closed = byKey("closed").map(e => e[1]);
-      const contributed = byKey("contributed").map(e => e[1]);
-      const comments = byKey("comments").map(e => e[1]);
-
-      const draw = (ctx, label, data) => {
-        return new Chart(ctx, {
-          type: "bar",
+      const createChart = (ctxId, label, dataValues) => {
+        new Chart(document.getElementById(ctxId), {
+          type: 'bar',
           data: {
-            labels,
+            labels: names,
             datasets: [{
               label,
-              data,
-              backgroundColor: labels.map(name => name.includes("Indi") ? "#4a90e2" : "#f57c00")
+              data: dataValues,
+              backgroundColor: colors
             }]
           },
           options: {
-            responsive: true,
-            indexAxis: "y",
-            plugins: { legend: { display: false } }
+            indexAxis: 'y',
+            plugins: { legend: { display: false } },
+            responsive: true
           }
         });
       };
 
-      document.getElementById("closersChart").replaceWith(document.getElementById("closersChart").cloneNode());
-      document.getElementById("contributorsChart").replaceWith(document.getElementById("contributorsChart").cloneNode());
-      document.getElementById("commentsChart").replaceWith(document.getElementById("commentsChart").cloneNode());
-
-      draw(document.getElementById("closersChart"), "Closed", closed);
-      draw(document.getElementById("contributorsChart"), "Contributed", contributed);
-      draw(document.getElementById("commentsChart"), "Comments", comments);
+      createChart("chart1", "Top Closers", issues);
+      createChart("chart2", "Top Contributors", prs);
+      createChart("chart3", "Top by Comments", comments);
     }
 
-    function applyFilters() {
-      const t = timeFilter.value;
-      const c = companyFilter.value;
-      const n = nameFilter.value;
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, "0");
-      const quarter = Math.floor((now.getMonth()) / 3) + 1;
-
-      const filtered = allData.filter(d => {
-        const [dYear, dMonth] = d.month.split("-");
-        const matchTime = (
-          t === "all" ||
-          (t === "month" && d.month === `${year}-${month}`) ||
-          (t === "year" && dYear === `${year}`) ||
-          (t === "quarter" && Math.floor((+dMonth - 1) / 3) + 1 === quarter && dYear === `${year}`)
-        );
-        const matchCompany = c === "all" || d.company === c;
-        const matchName = n === "all" || d.person === n;
-        return matchTime && matchCompany && matchName;
-      });
-
-      updateCharts(filtered);
-    }
-
-    onValue(ref(db, "engineering"), snap => {
-      const val = snap.val();
-      allData = [];
-      const companies = new Set();
-      const names = new Set();
-
-      Object.entries(val || {}).forEach(([month, perMonth]) => {
-        Object.entries(perMonth).forEach(([company, users]) => {
-          Object.entries(users).forEach(([user, stats]) => {
-            allData.push({ person: user, company, month, ...stats });
-            companies.add(company);
-            names.add(user);
-          });
-        });
-      });
-
-      companyFilter.innerHTML = '<option value="all">All Companies</option>' + Array.from(companies).sort().map(c => `<option value="${c}">${c}</option>`).join("");
-      nameFilter.innerHTML = '<option value="all">All Names</option>' + Array.from(names).sort().map(n => `<option value="${n}">${n}</option>`).join("");
-
-      applyFilters();
-    });
-
-    timeFilter.onchange = applyFilters;
-    companyFilter.onchange = applyFilters;
-    nameFilter.onchange = applyFilters;
+    loadData();
   </script>
 </body>
 </html>
