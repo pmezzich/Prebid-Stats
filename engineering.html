@@ -2,7 +2,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Prebid Engineering - People View</title>
+  <title>People View</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
@@ -12,17 +12,13 @@
       text-align: center;
     }
     canvas {
-      max-width: 90vw;
+      width: 90% !important;
       height: 600px !important;
       margin: 40px auto;
     }
     select, button {
       margin: 10px;
       padding: 5px;
-    }
-    .chart-container {
-      width: 90%;
-      margin: auto;
     }
   </style>
 </head>
@@ -45,129 +41,149 @@
     <button onclick="applyFilters()">Apply Filters</button>
   </div>
 
-  <div class="chart-container">
-    <canvas id="closersChart"></canvas>
-    <canvas id="contributorsChart"></canvas>
-  </div>
+  <canvas id="closersChart"></canvas>
+  <canvas id="contributorsChart"></canvas>
 
-  <script>
-    const firebaseUrl = "https://prebid-graphs-default-rtdb.firebaseio.com/stats.json";
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getDatabase,
+      ref,
+      get,
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-    let rawData = {};
-    let companies = new Set();
-    let names = new Set();
+    const firebaseConfig = {
+      apiKey: "AIzaSyB7lPuRWn8oflKZn4nmbdSREz35HaUbFnI",
+      authDomain: "prebid-graphs-default.firebaseapp.com",
+      databaseURL: "https://prebid-graphs-default-rtdb.firebaseio.com",
+      projectId: "prebid-graphs-default",
+      storageBucket: "prebid-graphs-default.appspot.com",
+      messagingSenderId: "277285460770",
+      appId: "1:277285460770:web:0d0a03716ab870c9b330b2"
+    };
 
-    async function loadData() {
-      const res = await fetch(firebaseUrl);
-      const data = await res.json();
-      rawData = data || {};
-      populateFilters();
-      renderCharts();
-    }
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
 
-    function populateFilters() {
-      const companySelect = document.getElementById('companyFilter');
-      const nameSelect = document.getElementById('nameFilter');
-      companies.clear();
-      names.clear();
+    let fullData = [];
 
-      Object.values(rawData).forEach(snapshot => {
-        Object.entries(snapshot).forEach(([company, info]) => {
-          if (company !== "people") {
-            companies.add(company);
-          } else {
-            Object.entries(info).forEach(([person, stats]) => {
-              names.add(person);
-              if (stats.company) companies.add(stats.company);
-            });
-          }
-        });
-      });
-
-      companies.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c;
-        opt.textContent = c;
-        companySelect.appendChild(opt);
-      });
-
-      names.forEach(n => {
-        const opt = document.createElement('option');
-        opt.value = n;
-        opt.textContent = n;
-        nameSelect.appendChild(opt);
-      });
+    function getCurrentPeriod(filter) {
+      const now = new Date();
+      if (filter === "month") return now.toISOString().slice(0, 7);
+      if (filter === "year") return now.getFullYear().toString();
+      if (filter === "quarter") {
+        const q = Math.floor((now.getMonth() + 3) / 3);
+        return `${now.getFullYear()}-Q${q}`;
+      }
+      return "all";
     }
 
     function applyFilters() {
-      renderCharts();
-    }
-
-    function renderCharts() {
       const timeFilter = document.getElementById("timeFilter").value;
       const companyFilter = document.getElementById("companyFilter").value;
       const nameFilter = document.getElementById("nameFilter").value;
 
+      const filtered = fullData.filter(item => {
+        if (companyFilter !== "all" && item.company !== companyFilter) return false;
+        if (nameFilter !== "all" && item.name !== nameFilter) return false;
+        return true;
+      });
+
       const closers = {};
       const contributors = {};
 
-      Object.entries(rawData).forEach(([month, snapshot]) => {
-        Object.entries(snapshot.people || {}).forEach(([person, stats]) => {
-          if ((companyFilter === "all" || stats.company === companyFilter) &&
-              (nameFilter === "all" || person === nameFilter)) {
-            if (!closers[person]) closers[person] = 0;
-            if (!contributors[person]) contributors[person] = 0;
-            closers[person] += stats.issues || 0;
-            contributors[person] += stats.prs || 0;
-          }
-        });
+      filtered.forEach(({ name, company, prs, issues, member }) => {
+        const label = `${name} (${company})`;
+        if (!closers[label]) closers[label] = { count: 0, member };
+        if (!contributors[label]) contributors[label] = { count: 0, member };
+
+        closers[label].count += issues;
+        contributors[label].count += prs;
       });
 
-      drawChart("closersChart", "Top Closers", closers);
-      drawChart("contributorsChart", "Top Contributors", contributors);
+      renderChart("closersChart", closers, "Top Closers");
+      renderChart("contributorsChart", contributors, "Top Contributors");
     }
 
-    function drawChart(id, label, data) {
-      const sorted = Object.entries(data).sort((a, b) => b[1] - a[1]).slice(0, 20);
-      const ctx = document.getElementById(id).getContext("2d");
-      if (window[id]) window[id].destroy();
+    function renderChart(canvasId, dataObj, title) {
+      const ctx = document.getElementById(canvasId).getContext("2d");
+      if (window[canvasId]) window[canvasId].destroy();
 
-      const colors = sorted.map(([name]) => name.includes("Prebid") ? "orange" : "steelblue");
+      const sorted = Object.entries(dataObj).sort((a, b) => b[1].count - a[1].count).slice(0, 25);
+      const labels = sorted.map(([label]) => label);
+      const data = sorted.map(([, val]) => val.count);
+      const colors = sorted.map(([, val]) => val.member ? "orange" : "blue");
 
-      window[id] = new Chart(ctx, {
+      window[canvasId] = new Chart(ctx, {
         type: "bar",
         data: {
-          labels: sorted.map(([name]) => name),
+          labels,
           datasets: [{
-            label: label,
-            data: sorted.map(([_, count]) => count),
+            label: title,
+            data,
             backgroundColor: colors
           }]
         },
         options: {
-          indexAxis: 'y',
+          indexAxis: "y",
           responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            x: { beginAtZero: true },
-            y: {
-              ticks: {
-                color: 'white',
-                font: {
-                  size: 12
-                }
-              }
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: title,
+              color: 'white'
             }
           },
-          plugins: {
-            legend: { display: true, labels: { color: 'white' } },
-            tooltip: { enabled: true }
+          scales: {
+            x: { ticks: { color: "white" }, grid: { color: "gray" }},
+            y: { ticks: { color: "white" }, grid: { color: "gray" }}
           }
         }
       });
     }
 
-    loadData();
+    const statsRef = ref(db, 'stats/2025-07');
+    get(statsRef).then(snapshot => {
+      const companies = snapshot.val();
+      const companiesList = new Set();
+      const namesList = new Set();
+      fullData = [];
+
+      for (const company in companies) {
+        const people = companies[company]?.people || {};
+        for (const name in people) {
+          const entry = people[name];
+          fullData.push({
+            name,
+            company,
+            prs: entry.prs || 0,
+            issues: entry.issues || 0,
+            member: entry.member || false,
+          });
+          companiesList.add(company);
+          namesList.add(name);
+        }
+      }
+
+      const companySelect = document.getElementById("companyFilter");
+      [...companiesList].sort().forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c;
+        opt.textContent = c;
+        companySelect.appendChild(opt);
+      });
+
+      const nameSelect = document.getElementById("nameFilter");
+      [...namesList].sort().forEach(n => {
+        const opt = document.createElement("option");
+        opt.value = n;
+        opt.textContent = n;
+        nameSelect.appendChild(opt);
+      });
+
+      applyFilters();
+    });
   </script>
 </body>
 </html>
