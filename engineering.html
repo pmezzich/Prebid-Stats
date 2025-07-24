@@ -1,139 +1,173 @@
+
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Prebid</title>
+  <title>Prebid Engineering - People View</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
-      background-color: #042f4b;
+      background-color: #042b44;
       color: white;
       font-family: Arial, sans-serif;
       text-align: center;
     }
-    h1, h2 {
-      margin: 0.5em;
-    }
-    .filters {
-      margin: 1em;
-    }
     canvas {
-      max-width: 1200px;
-      margin: 20px auto;
+      max-width: 90vw;
+      height: 600px !important;
+      margin: 40px auto;
+    }
+    select, button {
+      margin: 10px;
+      padding: 5px;
+    }
+    .chart-container {
+      width: 90%;
+      margin: auto;
     }
   </style>
 </head>
 <body>
-  <h1>Example Visualizations</h1>
-  <h2><em>Prebid Engineering</em> - People View</h2>
-
-  <div class="filters">
-    Filter by:
+  <h2>Example Visualizations<br><em>Prebid Engineering</em> - People View</h2>
+  <div>
+    <label>Filter by:</label>
     <select id="timeFilter">
-      <option>All Time</option>
-      <option>Month</option>
-      <option>Quarter</option>
-      <option>Year</option>
+      <option value="all">All Time</option>
+      <option value="month">This Month</option>
+      <option value="quarter">This Quarter</option>
+      <option value="year">This Year</option>
     </select>
     <select id="companyFilter">
-      <option>All Companies</option>
+      <option value="all">All Companies</option>
     </select>
     <select id="nameFilter">
-      <option>All Names</option>
+      <option value="all">All Names</option>
     </select>
     <button onclick="applyFilters()">Apply Filters</button>
   </div>
 
-  <canvas id="closersChart"></canvas>
-  <canvas id="contributorsChart"></canvas>
+  <div class="chart-container">
+    <canvas id="closersChart"></canvas>
+    <canvas id="contributorsChart"></canvas>
+  </div>
 
   <script>
-    const isMember = name => name.toLowerCase().includes("prebid");
+    const firebaseUrl = "https://prebid-graphs-default-rtdb.firebaseio.com/stats.json";
 
-    function createChart(canvasId, labels, data) {
-      const ctx = document.getElementById(canvasId).getContext("2d");
-      return new Chart(ctx, {
+    let rawData = {};
+    let companies = new Set();
+    let names = new Set();
+
+    async function loadData() {
+      const res = await fetch(firebaseUrl);
+      const data = await res.json();
+      rawData = data || {};
+      populateFilters();
+      renderCharts();
+    }
+
+    function populateFilters() {
+      const companySelect = document.getElementById('companyFilter');
+      const nameSelect = document.getElementById('nameFilter');
+      companies.clear();
+      names.clear();
+
+      Object.values(rawData).forEach(snapshot => {
+        Object.entries(snapshot).forEach(([company, info]) => {
+          if (company !== "people") {
+            companies.add(company);
+          } else {
+            Object.entries(info).forEach(([person, stats]) => {
+              names.add(person);
+              if (stats.company) companies.add(stats.company);
+            });
+          }
+        });
+      });
+
+      companies.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c;
+        opt.textContent = c;
+        companySelect.appendChild(opt);
+      });
+
+      names.forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n;
+        opt.textContent = n;
+        nameSelect.appendChild(opt);
+      });
+    }
+
+    function applyFilters() {
+      renderCharts();
+    }
+
+    function renderCharts() {
+      const timeFilter = document.getElementById("timeFilter").value;
+      const companyFilter = document.getElementById("companyFilter").value;
+      const nameFilter = document.getElementById("nameFilter").value;
+
+      const closers = {};
+      const contributors = {};
+
+      Object.entries(rawData).forEach(([month, snapshot]) => {
+        Object.entries(snapshot.people || {}).forEach(([person, stats]) => {
+          if ((companyFilter === "all" || stats.company === companyFilter) &&
+              (nameFilter === "all" || person === nameFilter)) {
+            if (!closers[person]) closers[person] = 0;
+            if (!contributors[person]) contributors[person] = 0;
+            closers[person] += stats.issues || 0;
+            contributors[person] += stats.prs || 0;
+          }
+        });
+      });
+
+      drawChart("closersChart", "Top Closers", closers);
+      drawChart("contributorsChart", "Top Contributors", contributors);
+    }
+
+    function drawChart(id, label, data) {
+      const sorted = Object.entries(data).sort((a, b) => b[1] - a[1]).slice(0, 20);
+      const ctx = document.getElementById(id).getContext("2d");
+      if (window[id]) window[id].destroy();
+
+      const colors = sorted.map(([name]) => name.includes("Prebid") ? "orange" : "steelblue");
+
+      window[id] = new Chart(ctx, {
         type: "bar",
         data: {
-          labels,
+          labels: sorted.map(([name]) => name),
           datasets: [{
-            label: canvasId === "closersChart" ? "Top Closers" : "Top Contributors",
-            data,
-            backgroundColor: labels.map(name => isMember(name) ? "orange" : "steelblue"),
+            label: label,
+            data: sorted.map(([_, count]) => count),
+            backgroundColor: colors
           }]
         },
         options: {
-          indexAxis: "y",
-          plugins: {
-            legend: { display: true }
-          },
+          indexAxis: 'y',
           responsive: true,
+          maintainAspectRatio: false,
           scales: {
-            x: {
-              ticks: {
-                color: "#ddd"
-              }
-            },
+            x: { beginAtZero: true },
             y: {
               ticks: {
-                color: "#ddd",
-                callback: value => value.length > 25 ? value.slice(0, 25) + "…" : value
+                color: 'white',
+                font: {
+                  size: 12
+                }
               }
             }
+          },
+          plugins: {
+            legend: { display: true, labels: { color: 'white' } },
+            tooltip: { enabled: true }
           }
         }
       });
     }
 
-    async function fetchData() {
-      const res = await fetch("https://prebid-graphs-default-rtdb.firebaseio.com/stats/2025-07.json");
-      return await res.json();
-    }
-
-    function flattenData(stats) {
-      const closers = {};
-      const contributors = {};
-      Object.entries(stats || {}).forEach(([company, entries]) => {
-        if (entries.people) {
-          Object.entries(entries.people).forEach(([user, stats]) => {
-            const label = `${user} (${company})`;
-            closers[label] = (closers[label] || 0) + (stats.issues || 0);
-            contributors[label] = (contributors[label] || 0) + (stats.prs || 0);
-          });
-        }
-      });
-      return { closers, contributors };
-    }
-
-    function updateCharts(closerChart, contributorChart, closers, contributors) {
-      const sortedClosers = Object.entries(closers).sort((a, b) => b[1] - a[1]);
-      const sortedContributors = Object.entries(contributors).sort((a, b) => b[1] - a[1]);
-
-      closerChart.data.labels = sortedClosers.map(entry => entry[0]);
-      closerChart.data.datasets[0].data = sortedClosers.map(entry => entry[1]);
-      closerChart.data.datasets[0].backgroundColor = closerChart.data.labels.map(name => isMember(name) ? "orange" : "steelblue");
-
-      contributorChart.data.labels = sortedContributors.map(entry => entry[0]);
-      contributorChart.data.datasets[0].data = sortedContributors.map(entry => entry[1]);
-      contributorChart.data.datasets[0].backgroundColor = contributorChart.data.labels.map(name => isMember(name) ? "orange" : "steelblue");
-
-      closerChart.update();
-      contributorChart.update();
-    }
-
-    async function applyFilters() {
-      const data = await fetchData();
-      const { closers, contributors } = flattenData(data);
-      updateCharts(closersChart, contributorsChart, closers, contributors);
-    }
-
-    let closersChart, contributorsChart;
-    fetchData().then(data => {
-      const { closers, contributors } = flattenData(data);
-      closersChart = createChart("closersChart", Object.keys(closers), Object.values(closers));
-      contributorsChart = createChart("contributorsChart", Object.keys(contributors), Object.values(contributors));
-    });
+    loadData();
   </script>
 </body>
 </html>
