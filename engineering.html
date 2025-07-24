@@ -1,92 +1,117 @@
+
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Prebid Engineering</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ng</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
   <style>
     body {
-      background-color: #0b2c42;
+      background-color: #052c44;
       color: white;
       font-family: Arial, sans-serif;
       text-align: center;
     }
-    canvas {
+    .chart-container {
+      width: 90%;
       margin: 20px auto;
-      display: block;
-      max-width: 90%;
     }
     select {
       margin: 10px;
+      padding: 5px;
     }
   </style>
 </head>
 <body>
-  <h2>Example Visualizations<br><em>Prebid Engineering</em></h2>
+  <h2>Example Visualizations<br/><em>Prebid Engineering</em></h2>
   <div>
     Filter by:
-    <select id="dateFilter">
+    <select id="timeFilter">
       <option>All Time</option>
+      <option>Month</option>
+      <option>Quarter</option>
+      <option>Year</option>
     </select>
-    <select id="companyFilter">
-      <option>All Companies</option>
-    </select>
-    <select id="nameFilter">
-      <option>All Names</option>
-    </select>
+    <select id="companyFilter"></select>
+    <select id="nameFilter"></select>
   </div>
-  <canvas id="chart1"></canvas>
-  <canvas id="chart2"></canvas>
-  <canvas id="chart3"></canvas>
+  <div class="chart-container"><canvas id="closersChart"></canvas></div>
+  <div class="chart-container"><canvas id="contributorsChart"></canvas></div>
+  <div class="chart-container"><canvas id="commentsChart"></canvas></div>
 
   <script>
-    async function loadData() {
-      const res = await fetch("https://prebid-graphs-default-rtdb.firebaseio.com/engineering.json");
-      const data = await res.json();
+    const firebaseConfig = {
+      databaseURL: "https://prebid-graphs-default-rtdb.firebaseio.com"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-      const userStats = {};
+    function processData(data) {
+      const closers = {};
+      const contributors = {};
+      const comments = {};
+      for (const company in data) {
+        for (const person in data[company]) {
+          const info = data[company][person];
+          closers[`${person} (${company})`] = info.closed || 0;
+          contributors[`${person} (${company})`] = info.contributed || 0;
+          comments[`${person} (${company})`] = info.comments || 0;
+        }
+      }
+      return { closers, contributors, comments };
+    }
 
-      Object.entries(data || {}).forEach(([company, users]) => {
-        Object.entries(users || {}).forEach(([username, stats]) => {
-          const key = username + " (" + company + ")";
-          userStats[key] = {
-            prs: stats.prs || 0,
-            issues: stats.issues || 0,
-            comments: stats.comments || 0,
-            company: company,
-            name: username
-          };
-        });
-      });
-
-      const names = Object.keys(userStats);
-      const prs = names.map(name => userStats[name].prs);
-      const issues = names.map(name => userStats[name].issues);
-      const comments = names.map(name => userStats[name].comments);
-
-      const colors = names.map(name => userStats[name].member ? "#ff7f0e" : "#1f77b4");
-
-      const createChart = (ctxId, label, dataValues) => {
-        new Chart(document.getElementById(ctxId), {
-          type: 'bar',
-          data: {
-            labels: names,
-            datasets: [{
-              label,
-              data: dataValues,
-              backgroundColor: colors
-            }]
+    function renderChart(canvasId, title, dataset, color) {
+      const ctx = document.getElementById(canvasId).getContext("2d");
+      const labels = Object.keys(dataset).sort((a, b) => dataset[b] - dataset[a]);
+      const data = labels.map((label) => dataset[label]);
+      new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            label: title,
+            data,
+            backgroundColor: color
+          }]
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: title,
+              color: 'white',
+              padding: 10
+            }
           },
-          options: {
-            indexAxis: 'y',
-            plugins: { legend: { display: false } },
-            responsive: true
+          scales: {
+            x: {
+              ticks: { color: 'white' },
+              grid: { color: 'gray' }
+            },
+            y: {
+              ticks: { color: 'white' },
+              grid: { color: 'gray' }
+            }
           }
-        });
-      };
+        }
+      });
+    }
 
-      createChart("chart1", "Top Closers", issues);
-      createChart("chart2", "Top Contributors", prs);
-      createChart("chart3", "Top by Comments", comments);
+    async function loadData() {
+      const snapshot = await db.ref("stats/2025-07").once("value");
+      const data = snapshot.val();
+      if (!data) return;
+      const { closers, contributors, comments } = processData(data);
+      renderChart("closersChart", "Top Closers", closers, "#f4731c");
+      renderChart("contributorsChart", "Top Contributors", contributors, "#f4731c");
+      renderChart("commentsChart", "Top Comments", comments, "#f4731c");
     }
 
     loadData();
