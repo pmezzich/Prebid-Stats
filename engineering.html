@@ -1,120 +1,171 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Prebid Engineering</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
-      background-color: #0b2c42;
+      background-color: #0b2f46;
       color: white;
       font-family: Arial, sans-serif;
       text-align: center;
     }
-    canvas {
-      margin: 20px auto;
-      display: block;
-      max-width: 90%;
+    h1, h2 {
+      margin: 10px;
+    }
+    .filters {
+      margin: 20px;
     }
     select {
-      margin: 10px;
+      margin: 0 10px;
+      padding: 5px;
+    }
+    .chart-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .chart-box {
+      width: 700px;
+      height: 400px;
+      margin: 20px;
     }
   </style>
 </head>
 <body>
-  <h2>Example Visualizations<br><em>Prebid Engineering</em></h2>
-  <div>
-    Filter by:
-    <select id="dateFilter">
-      <option>All Time</option>
+  <h1>Example Visualizations</h1>
+  <h2><em>Prebid Engineering</em></h2>
+  <div class="filters">
+    <label>Filter by:</label>
+    <select id="timeFilter">
+      <option value="all">All Time</option>
+      <option value="month">This Month</option>
+      <option value="quarter">This Quarter</option>
+      <option value="year">This Year</option>
     </select>
     <select id="companyFilter">
-      <option>All Companies</option>
+      <option value="all">All Companies</option>
     </select>
     <select id="nameFilter">
-      <option>All Names</option>
+      <option value="all">All Names</option>
     </select>
   </div>
-  <canvas id="chart1"></canvas>
-  <canvas id="chart2"></canvas>
-  <canvas id="chart3"></canvas>
+  <div class="chart-container">
+    <div class="chart-box"><canvas id="closersChart"></canvas></div>
+    <div class="chart-box"><canvas id="contributorsChart"></canvas></div>
+    <div class="chart-box"><canvas id="commentsChart"></canvas></div>
+  </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
     const firebaseConfig = {
-      apiKey: "AIzaSyDqslGsduWEZsf3Z-hKRsBygZ8B9Y9MiVk",
-      authDomain: "prebid-email-bot.firebaseapp.com",
-      databaseURL: "https://prebid-email-bot-default-rtdb.firebaseio.com",
-      projectId: "prebid-email-bot",
-      storageBucket: "prebid-email-bot.appspot.com",
-      messagingSenderId: "950794998006",
-      appId: "1:950794998006:web:07f7a6a91a3a39e7869f42"
+      databaseURL: "https://prebid-graphs-default-rtdb.firebaseio.com/"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
-    const engRef = ref(db, "engineering");
 
-    onValue(engRef, (snapshot) => {
-      const data = snapshot.val();
-      if (!data) return;
+    const timeFilter = document.getElementById("timeFilter");
+    const companyFilter = document.getElementById("companyFilter");
+    const nameFilter = document.getElementById("nameFilter");
 
-      const entries = [];
-      for (const company in data) {
-        for (const user in data[company]) {
-          const stats = data[company][user];
-          entries.push({
-            name: user,
-            company: company,
-            prs: stats.prs || 0,
-            issues: stats.issues || 0,
-            comments: stats.comments || 0,
-          });
-        }
-      }
+    let allData = [];
 
-      // Sort and render
-      entries.sort((a, b) => b.prs - a.prs);
-      const labels = entries.map(e => `${e.name} (${e.company})`);
-      const prData = entries.map(e => e.prs);
-      const issueData = entries.map(e => e.issues);
-      const commentData = entries.map(e => e.comments);
+    function updateCharts(filtered) {
+      const byKey = key =>
+        Object.entries(filtered.reduce((acc, d) => {
+          const k = d.person + " (" + d.company + ")";
+          acc[k] = (acc[k] || 0) + (d[key] || 0);
+          return acc;
+        }, {})).sort((a, b) => b[1] - a[1]);
 
-      const makeChart = (id, label, data) => {
-        new Chart(document.getElementById(id), {
-          type: 'bar',
+      const labels = byKey("closed").map(e => e[0]);
+      const closed = byKey("closed").map(e => e[1]);
+      const contributed = byKey("contributed").map(e => e[1]);
+      const comments = byKey("comments").map(e => e[1]);
+
+      const draw = (ctx, label, data) => {
+        return new Chart(ctx, {
+          type: "bar",
           data: {
             labels,
             datasets: [{
               label,
               data,
-              backgroundColor: "#ff7f0e"
+              backgroundColor: labels.map(name => name.includes("Indi") ? "#4a90e2" : "#f57c00")
             }]
           },
           options: {
-            indexAxis: 'y',
             responsive: true,
-            plugins: {
-              legend: { display: false },
-              title: {
-                display: true,
-                text: label,
-                color: 'white'
-              }
-            },
-            scales: {
-              x: { ticks: { color: "white" }, grid: { color: "#345" } },
-              y: { ticks: { color: "white" }, grid: { color: "#345" } }
-            }
+            indexAxis: "y",
+            plugins: { legend: { display: false } }
           }
         });
       };
 
-      makeChart("chart1", "Top Contributors (PRs)", prData);
-      makeChart("chart2", "Top Closers (Issues)", issueData);
-      makeChart("chart3", "Top by Comments", commentData);
+      document.getElementById("closersChart").replaceWith(document.getElementById("closersChart").cloneNode());
+      document.getElementById("contributorsChart").replaceWith(document.getElementById("contributorsChart").cloneNode());
+      document.getElementById("commentsChart").replaceWith(document.getElementById("commentsChart").cloneNode());
+
+      draw(document.getElementById("closersChart"), "Closed", closed);
+      draw(document.getElementById("contributorsChart"), "Contributed", contributed);
+      draw(document.getElementById("commentsChart"), "Comments", comments);
+    }
+
+    function applyFilters() {
+      const t = timeFilter.value;
+      const c = companyFilter.value;
+      const n = nameFilter.value;
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const quarter = Math.floor((now.getMonth()) / 3) + 1;
+
+      const filtered = allData.filter(d => {
+        const [dYear, dMonth] = d.month.split("-");
+        const matchTime = (
+          t === "all" ||
+          (t === "month" && d.month === `${year}-${month}`) ||
+          (t === "year" && dYear === `${year}`) ||
+          (t === "quarter" && Math.floor((+dMonth - 1) / 3) + 1 === quarter && dYear === `${year}`)
+        );
+        const matchCompany = c === "all" || d.company === c;
+        const matchName = n === "all" || d.person === n;
+        return matchTime && matchCompany && matchName;
+      });
+
+      updateCharts(filtered);
+    }
+
+    onValue(ref(db, "engineering"), snap => {
+      const val = snap.val();
+      allData = [];
+      const companies = new Set();
+      const names = new Set();
+
+      Object.entries(val || {}).forEach(([month, perMonth]) => {
+        Object.entries(perMonth).forEach(([company, users]) => {
+          Object.entries(users).forEach(([user, stats]) => {
+            allData.push({ person: user, company, month, ...stats });
+            companies.add(company);
+            names.add(user);
+          });
+        });
+      });
+
+      companyFilter.innerHTML = '<option value="all">All Companies</option>' + Array.from(companies).sort().map(c => `<option value="${c}">${c}</option>`).join("");
+      nameFilter.innerHTML = '<option value="all">All Names</option>' + Array.from(names).sort().map(n => `<option value="${n}">${n}</option>`).join("");
+
+      applyFilters();
     });
+
+    timeFilter.onchange = applyFilters;
+    companyFilter.onchange = applyFilters;
+    nameFilter.onchange = applyFilters;
   </script>
 </body>
 </html>
