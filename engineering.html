@@ -1,91 +1,105 @@
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8" />
   <title>Prebid Engineering</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { background: #002b45; color: white; font-family: sans-serif; text-align: center }
-    canvas { max-width: 900px; margin: 2em auto }
-    .legend { display: flex; justify-content: center; gap: 1em; margin-top: 1em }
-    .box { width: 20px; height: 20px; display: inline-block; margin-right: 0.5em }
+    body {
+      background-color: #052c44;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+    canvas {
+      background-color: #052c44;
+      margin: 30px auto;
+    }
+    select {
+      margin: 10px;
+      padding: 5px;
+    }
+    .filters {
+      margin: 15px;
+    }
   </style>
 </head>
 <body>
-  <h1>Example Visualizations<br><i>Prebid Engineering</i></h1>
-  <h3 style="color: orange;">Top closer, by year, quarter and month</h3>
-  <canvas id="topCloser"></canvas>
-  <h3 style="color: orange;">Top contributor, by year, quarter and month</h3>
-  <canvas id="topContributor"></canvas>
-  <h3 style="color: orange;">Top by comments, by year, quarter and month</h3>
-  <canvas id="topComments"></canvas>
-  <div class="legend">
-    <div><span class="box" style="background: orange;"></span>Member</div>
-    <div><span class="box" style="background: cornflowerblue;"></span>Non-member</div>
+  <h2>Example Visualizations<br><em>Prebid Engineering</em></h2>
+
+  <div class="filters">
+    <label>Filter by:</label>
+    <select id="filter-type">
+      <option value="all">All Time</option>
+      <option value="month">Month</option>
+      <option value="quarter">Quarter</option>
+      <option value="year">Year</option>
+    </select>
+    <select id="company-filter">
+      <option value="all">All Companies</option>
+    </select>
+    <select id="name-filter">
+      <option value="all">All Names</option>
+    </select>
   </div>
 
-  
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+  <canvas id="topClosers" width="1000" height="500"></canvas>
+  <canvas id="topContributors" width="1000" height="500"></canvas>
+  <canvas id="topComments" width="1000" height="500"></canvas>
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyDqslGsduWEZsf3Z-hKRsBygZ8B9Y9MiVk",
-    authDomain: "prebid-graphs.firebaseapp.com",
-    databaseURL: "https://prebid-graphs-default-rtdb.firebaseio.com",
-    projectId: "prebid-graphs",
-    storageBucket: "prebid-graphs.appspot.com",
-    messagingSenderId: "950794998006",
-    appId: "1:950794998006:web:07f7a6a91a3a39e7869f42"
-  };
+  <script>
+    async function loadData() {
+      const res = await fetch("https://prebid-graphs-default-rtdb.firebaseio.com/2025-07-individuals.json");
+      const data = await res.json();
 
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
+      let closers = [];
+      let contributors = [];
+      let comments = [];
 
-  const statsRef = ref(db, "stats");
-  get(statsRef).then((snap) => {
-    const data = snap.val();
-    const month = Object.keys(data).pop();
-    const companies = data[month];
-    const peopleMap = {};
-
-    for (const [company, value] of Object.entries(companies)) {
-      const people = value.people || {};
-      for (const [person, metrics] of Object.entries(people)) {
-        if (!peopleMap[person]) {
-          peopleMap[person] = { prs: 0, issues: 0, comments: 0, member: value.member };
+      for (const [company, users] of Object.entries(data)) {
+        for (const [person, stats] of Object.entries(users)) {
+          const label = `${person} (${company})`;
+          closers.push({ label, count: stats.closed || 0, member: stats.member });
+          contributors.push({ label, count: stats.prs || 0, member: stats.member });
+          comments.push({ label, count: stats.comments || 0, member: stats.member });
         }
-        peopleMap[person].prs += metrics.prs || 0;
-        peopleMap[person].issues += metrics.issues || 0;
-        peopleMap[person].comments += Math.floor(Math.random() * 10); // fake comment data
       }
+
+      // Sort each dataset descending
+      closers.sort((a, b) => b.count - a.count);
+      contributors.sort((a, b) => b.count - a.count);
+      comments.sort((a, b) => b.count - a.count);
+
+      const chartConfig = (ctx, title, dataset) => ({
+        type: "bar",
+        data: {
+          labels: dataset.map(d => d.label),
+          datasets: [{
+            label: title,
+            data: dataset.map(d => d.count),
+            backgroundColor: dataset.map(d => d.member ? "#ff7f0e" : "#6495ed")
+          }]
+        },
+        options: {
+          indexAxis: "y",
+          plugins: {
+            legend: { display: false }
+          },
+          responsive: true,
+          scales: {
+            x: { beginAtZero: true }
+          }
+        }
+      });
+
+      new Chart(document.getElementById("topClosers").getContext("2d"), chartConfig(null, "PRs Closed", closers));
+      new Chart(document.getElementById("topContributors").getContext("2d"), chartConfig(null, "PRs Opened", contributors));
+      new Chart(document.getElementById("topComments").getContext("2d"), chartConfig(null, "Comments", comments));
     }
 
-    const sorted = Object.entries(peopleMap).sort((a,b)=>b[1].prs - a[1].prs).slice(0,10);
-    const labels = sorted.map(([user]) => user);
-    const prs = sorted.map(([_, v]) => v.prs);
-    const issues = sorted.map(([_, v]) => v.issues);
-    const comments = sorted.map(([_, v]) => v.comments);
-    const colors = sorted.map(([_, v]) => v.member ? "orange" : "cornflowerblue");
-
-    new Chart(document.getElementById("topContributor"), {
-      type: "bar",
-      data: { labels, datasets: [{ label: "PRs", data: prs, backgroundColor: colors }] },
-      options: { indexAxis: "y", plugins: { legend: { display: false } } }
-    });
-
-    new Chart(document.getElementById("topCloser"), {
-      type: "bar",
-      data: { labels, datasets: [{ label: "Issues", data: issues, backgroundColor: colors }] },
-      options: { indexAxis: "y", plugins: { legend: { display: false } } }
-    });
-
-    new Chart(document.getElementById("topComments"), {
-      type: "bar",
-      data: { labels, datasets: [{ label: "Comments (fake)", data: comments, backgroundColor: colors }] },
-      options: { indexAxis: "y", plugins: { legend: { display: false } } }
-    });
-  });
+    loadData();
   </script>
 </body>
 </html>
