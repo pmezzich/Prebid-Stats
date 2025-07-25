@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>People View</title>
+  <title>Prebid Engineering - People View</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -30,6 +30,18 @@
       padding: 5px;
     }
   </style>
+
+<script>
+const memberCompanies = new Set(["33Across", "51Degrees (Movement for Open Web)", "AWS", "Adagio", "Aditude", "Admatic", "Adplayer.pro", "Algorix", "Audigent", "Blockthrough", "Browsi", "Confiant", "Contxtful", "Criteo", "Dailymotion", "Epsilon (Conversant)", "Ex.co", "FreeWheel (Comcast)", "Freestar", "Gannett/USA Today", "Greenbids", "Highfivve", "ID5", "Id5", "Index Exchange", "Inmobi", "Kargo", "LiveIntent", "Liveintent", "Liveramp", "Livewrapped", "Magnite", "Media.net", "Mediavine", "Missena", "Mobian", "Onetag", "OpenX", "Optable", "Opti Digital", "PostIndustria", "Preciso", "PubMatic", "PubNative (Verve)", "Pubmatic", "Pubstack", "Pubx.ai", "RTB House", "Raptive", "Relevant Digital", "Rise", "Scientamobile", "Scope3", "Sharethrough", "Shinka.io", "Sigma Software", "Smile Wanted", "Sonobi", "Sovrn", "StackAdapt", "Teads", "Teal Digital", "TeqBlaze (Smarty Ads)", "The Trade Desk", "Verve", "Xandr (Microsoft)", "Yahoo!", "verve"]);
+
+function getBarColor(companyLabel) {
+  for (const name of memberCompanies) {
+    if (companyLabel.includes("(" + name + ")")) return "orange";
+  }
+  return "deepskyblue";
+}
+</script>
+
 </head>
 <body>
   <h1>Example Visualizations</h1>
@@ -141,7 +153,9 @@
           const people = fullData[month][company].people || {};
           for (const person in people) {
                         const data = people[person];
-            dataMap[`${person} (${company})`] = (dataMap[`${person} (${company})`] || 0) + (data[metricFilter] || 0);
+            if (data[metricFilter] !== undefined) {
+      dataMap[`${person} (${company})`] = (dataMap[`${person} (${company})`] || 0) + data[metricFilter];
+    }
                       }
         }
       }
