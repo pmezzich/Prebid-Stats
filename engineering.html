@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Prebid Engineering - People View</title>
+  <title>People View</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -46,7 +46,6 @@
   </style>
 </head>
 <body>
-  <h1>Example Visualizations</h1>
   <h2><i>Prebid Engineering</i> - People View</h2>
   <div>
     Filter by:
@@ -157,7 +156,16 @@
       const colors = sortedEntries.map(e => e[1].member ? "orange" : "deepskyblue");
     
 
+      
       if (chart) chart.destroy();
+
+      // Calculate dynamic height based on number of bars
+      const ctx = document.getElementById("contribChart").getContext("2d");
+      const canvasContainer = document.getElementById("chartContainer");
+      const fullHeight = labels.length * 50;
+      canvasContainer.style.height = (Math.min(10, labels.length) * 50) + "px";
+      document.getElementById("contribChart").height = fullHeight;
+    
       const ctx = document.getElementById("contribChart").getContext("2d");
       chart = new Chart(ctx, {
         type: "bar",
