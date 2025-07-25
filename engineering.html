@@ -45,13 +45,11 @@
     <select id="companyFilter">
       <option value="all">All Companies</option>
     </select>
-    <select id="personFilter">
-      <option value="all">All Names</option>
-    </select>
+    
     <button onclick="applyFilters()">Apply Filters</button>
   </div>
   <canvas id="issuesChart"></canvas>
-  <canvas id="prsChart"></canvas>
+  
   <script>
     const firebaseConfig = {
       databaseURL: "https://prebid-graphs-default-rtdb.firebaseio.com"
@@ -100,8 +98,7 @@
       }
 
       const companyFilter = document.getElementById("companyFilter");
-      const personFilter = document.getElementById("personFilter");
-
+      
       companySet.forEach(c => {
         const opt = document.createElement("option");
         opt.value = opt.text = c;
@@ -118,11 +115,9 @@
     function applyFilters() {
       const dateFilter = document.getElementById("dateFilter").value;
       const companyFilter = document.getElementById("companyFilter").value;
-      const personFilter = document.getElementById("personFilter").value;
-
+      
       const issuesMap = {};
-      const prsMap = {};
-
+      
       for (const month in fullData) {
         if (!getCurrentPeriod(month, dateFilter)) continue;
 
@@ -130,17 +125,14 @@
           if (companyFilter !== "all" && company !== companyFilter) continue;
           const people = fullData[month][company].people || {};
           for (const person in people) {
-            if (personFilter !== "all" && person !== personFilter) continue;
-            const data = people[person];
+                        const data = people[person];
             issuesMap[`${person} (${company})`] = (issuesMap[`${person} (${company})`] || 0) + (data.issues || 0);
-            prsMap[`${person} (${company})`] = (prsMap[`${person} (${company})`] || 0) + (data.prs || 0);
-          }
+                      }
         }
       }
 
       renderChart("issuesChart", "Top Closers", issuesMap);
-      renderChart("prsChart", "Top Contributors", prsMap);
-    }
+          }
 
     function renderChart(canvasId, label, dataMap) {
       const canvas = document.getElementById(canvasId);
