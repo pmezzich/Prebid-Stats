@@ -143,7 +143,13 @@
     }
 
     function renderChart(canvasId, label, dataMap) {
-      const ctx = document.getElementById(canvasId).getContext("2d");
+      const canvas = document.getElementById(canvasId);
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = canvas.clientWidth * dpr;
+      canvas.height = canvas.clientHeight * dpr;
+      const ctx = canvas.getContext("2d");
+      ctx.scale(dpr, dpr);
+
       const sorted = Object.entries(dataMap).sort((a, b) => b[1] - a[1]).slice(0, 30);
       const labels = sorted.map(i => i[0]);
       const values = sorted.map(i => i[1]);
@@ -165,21 +171,31 @@
         options: {
           indexAxis: "y",
           responsive: true,
-		maintainAspectRatio: false,
           maintainAspectRatio: false,
+          animation: false,
           scales: {
             x: {
               beginAtZero: true,
-              ticks: { color: "white" },
+              ticks: { color: "white", font: { size: 14 } },
               grid: { color: "gray" }
             },
             y: {
-              ticks: { color: "white" },
+              ticks: { color: "white", font: { size: 14 } },
               grid: { color: "gray" }
             }
           },
           plugins: {
-            legend: { labels: { color: "white" } }
+            legend: {
+              labels: {
+                color: "white",
+                font: { size: 16, weight: "bold" }
+              }
+            }
+          },
+          elements: {
+            bar: {
+              borderWidth: 1
+            }
           }
         }
       });
