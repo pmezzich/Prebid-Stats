@@ -4,13 +4,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Prebid Engineering - People View</title>
-  <script>
-/script>
-  <script>
-/script>
-  <script>
-/script>
+  <title>View</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <style>
     body {
       background-color: #0a2c42;
@@ -28,53 +25,82 @@
       max-width: 1000px;
       height: 600px !important;
     }
-    select, button {
-      margin: 0 10px;
+    select, input[type="date"], button {
+      margin: 10px;
       padding: 5px;
+      font-size: 16px;
+    }
+    .legend {
+      margin-top: 30px;
+    }
+    .legend span {
+      display: inline-block;
+      margin-right: 20px;
+    }
+    .legend .member {
+      color: orange;
+    }
+    .legend .nonmember {
+      color: deepskyblue;
     }
   </style>
-
-<script>
-const memberCompanies = new Set(["33Across", "51Degrees (Movement for Open Web)", "AWS", "Adagio", "Aditude", "Admatic", "Adplayer.pro", "Algorix", "Audigent", "Blockthrough", "Browsi", "Confiant", "Contxtful", "Criteo", "Dailymotion", "Epsilon (Conversant)", "Ex.co", "FreeWheel (Comcast)", "Freestar", "Gannett/USA Today", "Greenbids", "Highfivve", "ID5", "Id5", "Index Exchange", "Inmobi", "Kargo", "LiveIntent", "Liveintent", "Liveramp", "Livewrapped", "Magnite", "Media.net", "Mediavine", "Missena", "Mobian", "Onetag", "OpenX", "Optable", "Opti Digital", "PostIndustria", "Preciso", "PubMatic", "PubNative (Verve)", "Pubmatic", "Pubstack", "Pubx.ai", "RTB House", "Raptive", "Relevant Digital", "Rise", "Scientamobile", "Scope3", "Sharethrough", "Shinka.io", "Sigma Software", "Smile Wanted", "Sonobi", "Sovrn", "StackAdapt", "Teads", "Teal Digital", "TeqBlaze (Smarty Ads)", "The Trade Desk", "Verve", "Xandr (Microsoft)", "Yahoo!", "verve"]);
-
-function getBarColor(companyLabel) {
-  for (const name of memberCompanies) {
-    if (companyLabel.includes("(" + name + ")")) return "orange";
-  }
-  return "deepskyblue";
-}
-</script>
-
 </head>
 <body>
   <h1>Example Visualizations</h1>
-  <h2><em>Prebid Engineering</em> - People View</h2>
+  <h2><i>Prebid Engineering</i> - People View</h2>
   <div>
     Filter by:
-    <select id="metricFilter">
+    <select id="filterType">
       <option value="prs">Pull Requests</option>
-      <option value="prs_merged">PRs Merged</option>
       <option value="commits">Commits</option>
       <option value="issues">Issues</option>
       <option value="events">Events</option>
-      <option value="reviews">Review Activity</option>
+      <option value="prs_merged"># of PR’s Merged</option>
       <option value="code_volume">Code Volume</option>
-      <option value="days_active">Most Days Active</option>
+      <option value="active_days">Most Days Active</option>
+      <option value="review_activity">Review Activity</option>
     </select>
     From: <input type="date" id="startDate">
     To: <input type="date" id="endDate">
-    <select id="companyFilter">
+    <select id="companySelect">
       <option value="all">All Companies</option>
     </select>
-    
     <button onclick="applyFilters()">Apply Filters</button>
   </div>
-  <canvas id="issuesChart"></canvas>
-  <div style="margin-top: 10px; font-size: 14px;">
-    <span style="color: orange;">■</span> Member Company &nbsp;&nbsp;
-    <span style="color: deepskyblue;">■</span> Non-Member Company
+  <canvas id="contribChart"></canvas>
+  <script>
+    const defaultStart = new Date();
+    defaultStart.setMonth(defaultStart.getMonth() - 1);
+    document.getElementById("startDate").value = defaultStart.toISOString().slice(0, 10);
+    document.getElementById("endDate").value = new Date().toISOString().slice(0, 10);
+
+    // Automatically apply filters once data is loaded
+    const waitForDataAndDraw = async () => {
+      rawData = await fetchData();
+      companyMap = await getCompanyMap();
+      const companySelect = document.getElementById("companySelect");
+      const companies = new Set();
+      for (const month in rawData) {
+        for (const company in rawData[month]) {
+          companies.add(company);
+        }
+      }
+      [...companies].sort().forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c;
+        opt.textContent = c;
+        companySelect.appendChild(opt);
+      });
+      applyFilters();
+    };
+    window.onload = waitForDataAndDraw;
+  </script>
+
+  <div class="legend">
+    <span class="member">■ Member Company</span>
+    <span class="nonmember">■ Non-Member Company</span>
   </div>
-  
+
   <script>
     const firebaseConfig = {
       databaseURL: "https://prebid-graphs-default-rtdb.firebaseio.com"
@@ -82,156 +108,96 @@ function getBarColor(companyLabel) {
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    let fullData = {};
+    let rawData = {};
+    let companyMap = {};
+    let chart = null;
 
-    function getCurrentPeriod(key) {
-      const start = document.getElementById("startDate").value;
-      const end = document.getElementById("endDate").value;
-      if (!start || !end) return true;
-      const [year, month] = key.split("-");
-      const date = new Date(`${year}-${month}-01`);
-      const startDate = new Date(start);
-      const endDate = new Date(end);
-      return date >= startDate && date <= endDate;
+    function fetchData() {
+      return db.ref("stats").once("value").then(snapshot => snapshot.val());
     }
 
-    function loadData() {
-      db.ref("stats").once("value", snapshot => {
-        fullData = snapshot.val(); console.log("📦 Loaded Firebase data:", fullData);
-        populateFilters();
-        applyFilters();
-      });
+    function getCompanyMap() {
+      return fetch("user_company_map.json").then(res => res.json());
     }
 
-    function populateFilters() {
-      const companySet = new Set();
-      const personSet = new Set();
-      for (const month in fullData) {
-        for (const company in fullData[month]) {
-          companySet.add(company);
-          const entry = fullData[month][company];
-          if (entry.people) {
-            for (const person in entry.people) {
-              personSet.add(person);
-            }
-          }
-        }
-      }
+    function applyFilters() {
+      const filterType = document.getElementById("filterType").value;
+      const start = new Date(document.getElementById("startDate").value);
+      const end = new Date(document.getElementById("endDate").value);
+      const companyFilter = document.getElementById("companySelect").value;
 
-      const companyFilter = document.getElementById("companyFilter");
-      
-      companySet.forEach(c => {
-        const opt = document.createElement("option");
-        opt.value = opt.text = c;
-        companyFilter.appendChild(opt);
-      });
+      const dataset = {};
+      for (const month in rawData) {
+        const monthDate = new Date(month + "-01");
+        if (monthDate < start || monthDate > end) continue;
 
-      personSet.forEach(p => {
-        const opt = document.createElement("option");
-        opt.value = opt.text = p;
-        personFilter.appendChild(opt);
-      });
-    }
-
-    window.applyFilters = function applyFilters() {
-  console.log("🔍 Applying filters...");
-
-      const metricFilter = document.getElementById("metricFilter").value;
-      
-      const companyFilter = document.getElementById("companyFilter").value;
-      
-      const dataMap = {};
-      
-      for (const month in fullData) {
-        if (!getCurrentPeriod(month)) continue;
-
-        for (const company in fullData[month]) {
+        for (const company in rawData[month]) {
           if (companyFilter !== "all" && company !== companyFilter) continue;
-          const people = fullData[month][company].people || {};
+
+          const people = rawData[month][company]["people"] || {};
+          const member = rawData[month][company]["member"] || false;
+
           for (const person in people) {
-                        const data = people[person];
-            if (data[metricFilter] !== undefined) {
-      dataMap[`${person} (${company})`] = (dataMap[`${person} (${company})`] || 0) + data[metricFilter];
-    }
-                      }
+            const val = people[person][filterType] || 0;
+            const label = `${person} (${company})`;
+            if (!dataset[label]) {
+              dataset[label] = { value: 0, member };
+            }
+            dataset[label].value += val;
+          }
         }
       }
 
-      renderChart("issuesChart", "Top " + metricFilter.replaceAll("_", " "), dataMap);
-          }
+      const labels = Object.keys(dataset);
+      const data = labels.map(l => dataset[l].value);
+      const colors = labels.map(l => dataset[l].member ? "orange" : "deepskyblue");
 
-    function renderChart(canvasId, label, dataMap) {
-      const canvas = document.getElementById(canvasId);
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = canvas.clientWidth * dpr;
-      canvas.height = canvas.clientHeight * dpr;
-      const ctx = canvas.getContext("2d");
-      ctx.scale(dpr, dpr);
-
-      const sorted = Object.entries(dataMap).sort((a, b) => b[1] - a[1]).slice(0, 30);
-      const labels = sorted.map(i => i[0]);
-      const values = sorted.map(i => i[1]);
-
-      if (window[canvasId + "_instance"]) {
-        window[canvasId + "_instance"].destroy();
-      }
-
-      window[canvasId + "_instance"] = new Chart(ctx, {
+      if (chart) chart.destroy();
+      const ctx = document.getElementById("contribChart").getContext("2d");
+      chart = new Chart(ctx, {
         type: "bar",
         data: {
           labels,
           datasets: [{
-            label,
-            data: values,
-            backgroundColor: labels.map(label => getBarColor(label))
+            label: filterType,
+            data,
+            backgroundColor: colors
           }]
         },
         options: {
-          indexAxis: "y",
           responsive: true,
-          maintainAspectRatio: false,
-          animation: false,
-          scales: {
-            x: {
-              beginAtZero: true,
-              ticks: { color: "white", font: { size: 14 } },
-              grid: { color: "gray" }
-            },
-            y: {
-              ticks: { color: "white", font: { size: 14 } },
-              grid: { color: "gray" }
-            }
-          },
           plugins: {
-            legend: {
-              labels: {
-                color: "white",
-                font: { size: 16, weight: "bold" }
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.parsed.y} ${filterType}`
               }
-            }
-          },
-          elements: {
-            bar: {
-              borderWidth: 1
             }
           }
         }
       });
     }
 
-    loadData();
-  
-<script>
-const memberCompanies = new Set(["33Across", "51Degrees (Movement for Open Web)", "AWS", "Adagio", "Aditude", "Admatic", "Adplayer.pro", "Algorix", "Audigent", "Blockthrough", "Browsi", "Confiant", "Contxtful", "Criteo", "Dailymotion", "Epsilon (Conversant)", "Ex.co", "FreeWheel (Comcast)", "Freestar", "Gannett/USA Today", "Greenbids", "Highfivve", "ID5", "Id5", "Index Exchange", "Inmobi", "Kargo", "LiveIntent", "Liveintent", "Liveramp", "Livewrapped", "Magnite", "Media.net", "Mediavine", "Missena", "Mobian", "Onetag", "OpenX", "Optable", "Opti Digital", "PostIndustria", "Preciso", "PubMatic", "PubNative (Verve)", "Pubmatic", "Pubstack", "Pubx.ai", "RTB House", "Raptive", "Relevant Digital", "Rise", "Scientamobile", "Scope3", "Sharethrough", "Shinka.io", "Sigma Software", "Smile Wanted", "Sonobi", "Sovrn", "StackAdapt", "Teads", "Teal Digital", "TeqBlaze (Smarty Ads)", "The Trade Desk", "Verve", "Xandr (Microsoft)", "Yahoo!", "verve"]);
+    window.onload = async () => {
+      rawData = await fetchData();
+      companyMap = await getCompanyMap();
 
-function getBarColor(companyLabel) {
-  for (const name of memberCompanies) {
-    if (companyLabel.includes("(" + name + ")")) return "orange";
-  }
-  return "deepskyblue";
-}
-</script>
+      const companySelect = document.getElementById("companySelect");
+      const companies = new Set();
+      for (const month in rawData) {
+        for (const company in rawData[month]) {
+          companies.add(company);
+        }
+      }
+      [...companies].sort().forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c;
+        opt.textContent = c;
+        companySelect.appendChild(opt);
+      });
 
-</script>
+      console.log("🔥 Firebase data loaded:", rawData);
+    };
+  </script>
 </body>
 </html>
