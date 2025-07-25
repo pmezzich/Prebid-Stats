@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Prebid Engineering - People View</title>
+  <title>People View</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -36,6 +36,16 @@
   <h2><em>Prebid Engineering</em> - People View</h2>
   <div>
     Filter by:
+    <select id="metricFilter">
+      <option value="prs">Pull Requests</option>
+      <option value="prs_merged">PRs Merged</option>
+      <option value="commits">Commits</option>
+      <option value="issues">Issues</option>
+      <option value="events">Events</option>
+      <option value="reviews">Review Activity</option>
+      <option value="code_volume">Code Volume</option>
+      <option value="days_active">Most Days Active</option>
+    </select>
     <select id="dateFilter">
       <option value="all">All Time</option>
       <option value="month">This Month</option>
@@ -49,6 +59,10 @@
     <button onclick="applyFilters()">Apply Filters</button>
   </div>
   <canvas id="issuesChart"></canvas>
+  <div style="margin-top: 10px; font-size: 14px;">
+    <span style="color: orange;">■</span> Member Company &nbsp;&nbsp;
+    <span style="color: deepskyblue;">■</span> Non-Member Company
+  </div>
   
   <script>
     const firebaseConfig = {
@@ -113,10 +127,11 @@
     }
 
     function applyFilters() {
+      const metricFilter = document.getElementById("metricFilter").value;
       const dateFilter = document.getElementById("dateFilter").value;
       const companyFilter = document.getElementById("companyFilter").value;
       
-      const issuesMap = {};
+      const dataMap = {};
       
       for (const month in fullData) {
         if (!getCurrentPeriod(month, dateFilter)) continue;
@@ -126,12 +141,12 @@
           const people = fullData[month][company].people || {};
           for (const person in people) {
                         const data = people[person];
-            issuesMap[`${person} (${company})`] = (issuesMap[`${person} (${company})`] || 0) + (data.issues || 0);
+            dataMap[`${person} (${company})`] = (dataMap[`${person} (${company})`] || 0) + (data[metricFilter] || 0);
                       }
         }
       }
 
-      renderChart("issuesChart", "Top Closers", issuesMap);
+      renderChart("issuesChart", "Top " + metricFilter.replaceAll("_", " "), dataMap);
           }
 
     function renderChart(canvasId, label, dataMap) {
@@ -157,7 +172,7 @@
           datasets: [{
             label,
             data: values,
-            backgroundColor: "rgba(255, 255, 255, 0.7)"
+            backgroundColor: labels.map(label => getBarColor(label))
           }]
         },
         options: {
@@ -194,6 +209,18 @@
     }
 
     loadData();
-  </script>
+  
+<script>
+const memberCompanies = new Set(["33Across", "51Degrees (Movement for Open Web)", "AWS", "Adagio", "Aditude", "Admatic", "Adplayer.pro", "Algorix", "Audigent", "Blockthrough", "Browsi", "Confiant", "Contxtful", "Criteo", "Dailymotion", "Epsilon (Conversant)", "Ex.co", "FreeWheel (Comcast)", "Freestar", "Gannett/USA Today", "Greenbids", "Highfivve", "ID5", "Id5", "Index Exchange", "Inmobi", "Kargo", "LiveIntent", "Liveintent", "Liveramp", "Livewrapped", "Magnite", "Media.net", "Mediavine", "Missena", "Mobian", "Onetag", "OpenX", "Optable", "Opti Digital", "PostIndustria", "Preciso", "PubMatic", "PubNative (Verve)", "Pubmatic", "Pubstack", "Pubx.ai", "RTB House", "Raptive", "Relevant Digital", "Rise", "Scientamobile", "Scope3", "Sharethrough", "Shinka.io", "Sigma Software", "Smile Wanted", "Sonobi", "Sovrn", "StackAdapt", "Teads", "Teal Digital", "TeqBlaze (Smarty Ads)", "The Trade Desk", "Verve", "Xandr (Microsoft)", "Yahoo!", "verve"]);
+
+function getBarColor(companyLabel) {
+  for (const name of memberCompanies) {
+    if (companyLabel.includes("(" + name + ")")) return "orange";
+  }
+  return "deepskyblue";
+}
+</script>
+
+</script>
 </body>
 </html>
