@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>People View</title>
+  <title>Prebid Engineering - People View</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -57,6 +57,8 @@
       <option value="events">Events</option>
       <option value="prs_merged"># of PR’s Merged</option>
       <option value="code_volume">Code Volume</option>
+      <option value="active_days">Most Days Active</option>
+      <option value="review_activity">Review Activity</option>
     </select>
     From: <input type="date" id="startDate">
     To: <input type="date" id="endDate">
@@ -146,9 +148,12 @@
         }
       }
 
-      const labels = Object.keys(dataset);
-      const data = labels.map(l => dataset[l].value);
-      const colors = labels.map(l => dataset[l].member ? "orange" : "deepskyblue");
+      
+      const sortedEntries = Object.entries(dataset).sort((a, b) => b[1].value - a[1].value);
+      const labels = sortedEntries.map(e => e[0]);
+      const data = sortedEntries.map(e => e[1].value);
+      const colors = sortedEntries.map(e => e[1].member ? "orange" : "deepskyblue");
+    
 
       if (chart) chart.destroy();
       const ctx = document.getElementById("contribChart").getContext("2d");
