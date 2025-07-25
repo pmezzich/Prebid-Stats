@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>People View</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.0"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <style>
@@ -16,31 +16,33 @@
       font-family: Arial, sans-serif;
       text-align: center;
     }
-    h2 {
+    h1, h2 {
       margin: 20px 0 10px;
     }
     canvas {
       margin: 30px auto;
       display: block;
+      width: 90% !important;
+      max-width: 1000px;
     }
     select, input[type="date"], button {
       margin: 10px;
       padding: 5px;
       font-size: 16px;
     }
-    #chartContainer {
-      height: 600px;
-      overflow-y: scroll;
-    }
     .legend {
-      margin-top: 20px;
+      margin-top: 30px;
     }
     .legend span {
       display: inline-block;
       margin-right: 20px;
     }
-    .member { color: orange; }
-    .nonmember { color: deepskyblue; }
+    .legend .member {
+      color: orange;
+    }
+    .legend .nonmember {
+      color: deepskyblue;
+    }
   </style>
 </head>
 <body>
@@ -63,18 +65,16 @@
     Show Top:
     <select id="topN">
       <option value="5">Top 5</option>
-      <option value="10" selected>Top 10</option>
+      <option value="10">Top 10</option>
       <option value="20">Top 20</option>
       <option value="30">Top 30</option>
-      <option value="50">Top 50</option>
-      <option value="all">All</option>
+      <option value="50" selected>Top 50</option>
+      <option value="9999">All</option>
     </select>
     <button onclick="applyFilters()">Apply Filters</button>
   </div>
-
-  <div id="chartContainer">
-    <canvas id="contribChart" height="1000"></canvas>
-  </div>
+  
+  <canvas id="contribChart" height="800"></canvas>
 
   <div class="legend">
     <span class="member">■ Member Company</span>
@@ -105,7 +105,7 @@
       const start = new Date(document.getElementById("startDate").value);
       const end = new Date(document.getElementById("endDate").value);
       const companyFilter = document.getElementById("companySelect").value;
-      const topN = document.getElementById("topN").value;
+      const topNValue = parseInt(document.getElementById("topN").value);
 
       const dataset = {};
       for (const month in rawData) {
@@ -129,17 +129,14 @@
         }
       }
 
-      let sortedEntries = Object.entries(dataset).sort((a, b) => b[1].value - a[1].value);
-      if (topN !== "all") {
-        sortedEntries = sortedEntries.slice(0, parseInt(topN));
-      }
-
+      const sortedEntries = Object.entries(dataset)
+        .sort((a, b) => b[1].value - a[1].value)
+        .slice(0, topNValue);
       const labels = sortedEntries.map(e => e[0]);
       const data = sortedEntries.map(e => e[1].value);
       const colors = sortedEntries.map(e => e[1].member ? "orange" : "deepskyblue");
 
       if (chart) chart.destroy();
-
       const ctx = document.getElementById("contribChart").getContext("2d");
       chart = new Chart(ctx, {
         type: "bar",
@@ -152,21 +149,28 @@
           }]
         },
         options: {
+          indexAxis: 'y',
           responsive: true,
-          indexAxis: "y",
+          maintainAspectRatio: false,
           plugins: {
             legend: { display: false },
-            zoom: {
-              pan: { enabled: true, mode: "y" },
-              zoom: {
-                wheel: { enabled: true },
-                pinch: { enabled: true },
-                mode: "y"
-              }
-            },
             tooltip: {
               callbacks: {
                 label: (ctx) => `${ctx.parsed.x} ${filterType}`
+              }
+            }
+          },
+          layout: {
+            padding: { left: 200 }
+          },
+          scales: {
+            y: {
+              ticks: {
+                font: { size: 10 },
+                callback: function(value) {
+                  const label = this.getLabelForValue(value);
+                  return label.length > 40 ? label.slice(0, 37) + "..." : label;
+                }
               }
             }
           }
