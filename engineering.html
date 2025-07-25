@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Prebid Engineering - People View</title>
+  <title>w</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -94,7 +94,7 @@ function getBarColor(companyLabel) {
 
     function loadData() {
       db.ref("stats").once("value", snapshot => {
-        fullData = snapshot.val();
+        fullData = snapshot.val(); console.log("📦 Loaded Firebase data:", fullData);
         populateFilters();
         applyFilters();
       });
@@ -130,7 +130,9 @@ function getBarColor(companyLabel) {
       });
     }
 
-    function applyFilters() {
+    window.applyFilters = function applyFilters() {
+  console.log("🔍 Applying filters...");
+
       const metricFilter = document.getElementById("metricFilter").value;
       
       const companyFilter = document.getElementById("companyFilter").value;
