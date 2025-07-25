@@ -46,6 +46,7 @@
   </style>
 </head>
 <body>
+  <h1>Example Visualizations</h1>
   <h2><i>Prebid Engineering</i> - People View</h2>
   <div>
     Filter by:
@@ -64,7 +65,11 @@
     </select>
     <button onclick="applyFilters()">Apply Filters</button>
   </div>
-  <canvas id="contribChart"></canvas>
+  
+  <div id="chartContainer" style="max-height: 600px; overflow-y: auto;">
+    <canvas id="contribChart" height="800"></canvas>
+  </div>
+
   <script>
     const defaultStart = new Date();
     defaultStart.setMonth(defaultStart.getMonth() - 1);
