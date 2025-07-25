@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>People View</title>
+  <title>Prebid Engineering - People View</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.0"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -18,12 +18,6 @@
     }
     h1, h2 {
       margin: 20px 0 10px;
-    }
-    canvas {
-      margin: 30px auto;
-      display: block;
-      width: 90% !important;
-      max-width: 1000px;
     }
     select, input[type="date"], button {
       margin: 10px;
@@ -42,6 +36,14 @@
     }
     .legend .nonmember {
       color: deepskyblue;
+    }
+    #chartContainer {
+      width: 90%;
+      max-width: 1200px;
+      margin: 20px auto;
+    }
+    canvas {
+      width: 100% !important;
     }
   </style>
 </head>
@@ -63,18 +65,20 @@
       <option value="all">All Companies</option>
     </select>
     Show Top:
-    <select id="topN">
+    <select id="topSelect">
       <option value="5">Top 5</option>
       <option value="10">Top 10</option>
       <option value="20">Top 20</option>
       <option value="30">Top 30</option>
       <option value="50" selected>Top 50</option>
-      <option value="9999">All</option>
+      <option value="all">All</option>
     </select>
     <button onclick="applyFilters()">Apply Filters</button>
   </div>
-  
-  <canvas id="contribChart" height="800"></canvas>
+
+  <div id="chartContainer">
+    <canvas id="contribChart"></canvas>
+  </div>
 
   <div class="legend">
     <span class="member">■ Member Company</span>
@@ -105,7 +109,7 @@
       const start = new Date(document.getElementById("startDate").value);
       const end = new Date(document.getElementById("endDate").value);
       const companyFilter = document.getElementById("companySelect").value;
-      const topNValue = parseInt(document.getElementById("topN").value);
+      const topLimit = document.getElementById("topSelect").value;
 
       const dataset = {};
       for (const month in rawData) {
@@ -129,14 +133,16 @@
         }
       }
 
-      const sortedEntries = Object.entries(dataset)
-        .sort((a, b) => b[1].value - a[1].value)
-        .slice(0, topNValue);
+      let sortedEntries = Object.entries(dataset).sort((a, b) => b[1].value - a[1].value);
+      if (topLimit !== "all") {
+        sortedEntries = sortedEntries.slice(0, parseInt(topLimit));
+      }
       const labels = sortedEntries.map(e => e[0]);
       const data = sortedEntries.map(e => e[1].value);
       const colors = sortedEntries.map(e => e[1].member ? "orange" : "deepskyblue");
 
       if (chart) chart.destroy();
+
       const ctx = document.getElementById("contribChart").getContext("2d");
       chart = new Chart(ctx, {
         type: "bar",
@@ -158,19 +164,18 @@
               callbacks: {
                 label: (ctx) => `${ctx.parsed.x} ${filterType}`
               }
+            },
+            zoom: {
+              pan: { enabled: true, mode: 'y' },
+              zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'y' }
             }
-          },
-          layout: {
-            padding: { left: 200 }
           },
           scales: {
             y: {
               ticks: {
-                font: { size: 10 },
-                callback: function(value) {
-                  const label = this.getLabelForValue(value);
-                  return label.length > 40 ? label.slice(0, 37) + "..." : label;
-                }
+                autoSkip: false,
+                maxRotation: 0,
+                font: { size: 12 }
               }
             }
           }
@@ -179,11 +184,6 @@
     }
 
     window.onload = async () => {
-      const defaultStart = new Date();
-      defaultStart.setMonth(defaultStart.getMonth() - 1);
-      document.getElementById("startDate").value = defaultStart.toISOString().slice(0, 10);
-      document.getElementById("endDate").value = new Date().toISOString().slice(0, 10);
-
       rawData = await fetchData();
       companyMap = await getCompanyMap();
 
@@ -200,6 +200,11 @@
         opt.textContent = c;
         companySelect.appendChild(opt);
       });
+
+      const defaultStart = new Date();
+      defaultStart.setMonth(defaultStart.getMonth() - 1);
+      document.getElementById("startDate").value = defaultStart.toISOString().slice(0, 10);
+      document.getElementById("endDate").value = new Date().toISOString().slice(0, 10);
 
       applyFilters();
     };
