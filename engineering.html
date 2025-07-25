@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>People View</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <style>
@@ -16,36 +16,31 @@
       font-family: Arial, sans-serif;
       text-align: center;
     }
-    h1, h2 {
+    h2 {
       margin: 20px 0 10px;
     }
     canvas {
+      margin: 30px auto;
       display: block;
-      margin: auto;
-      width: 90% !important;
     }
     select, input[type="date"], button {
       margin: 10px;
       padding: 5px;
       font-size: 16px;
     }
+    #chartContainer {
+      height: 600px;
+      overflow-y: scroll;
+    }
     .legend {
-      margin-top: 30px;
+      margin-top: 20px;
     }
     .legend span {
       display: inline-block;
       margin-right: 20px;
     }
-    .legend .member {
-      color: orange;
-    }
-    .legend .nonmember {
-      color: deepskyblue;
-    }
-    #chartContainer {
-      height: 600px;
-      overflow-y: auto;
-    }
+    .member { color: orange; }
+    .nonmember { color: deepskyblue; }
   </style>
 </head>
 <body>
@@ -65,11 +60,22 @@
     <select id="companySelect">
       <option value="all">All Companies</option>
     </select>
+    Show Top:
+    <select id="topN">
+      <option value="5">Top 5</option>
+      <option value="10" selected>Top 10</option>
+      <option value="20">Top 20</option>
+      <option value="30">Top 30</option>
+      <option value="50">Top 50</option>
+      <option value="all">All</option>
+    </select>
     <button onclick="applyFilters()">Apply Filters</button>
   </div>
+
   <div id="chartContainer">
-    <canvas id="contribChart"></canvas>
+    <canvas id="contribChart" height="1000"></canvas>
   </div>
+
   <div class="legend">
     <span class="member">■ Member Company</span>
     <span class="nonmember">■ Non-Member Company</span>
@@ -86,14 +92,11 @@
     let companyMap = {};
     let chart = null;
 
-    document.getElementById("startDate").value = new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().slice(0, 10);
-    document.getElementById("endDate").value = new Date().toISOString().slice(0, 10);
-
-    async function fetchData() {
+    function fetchData() {
       return db.ref("stats").once("value").then(snapshot => snapshot.val());
     }
 
-    async function getCompanyMap() {
+    function getCompanyMap() {
       return fetch("user_company_map.json").then(res => res.json());
     }
 
@@ -102,15 +105,19 @@
       const start = new Date(document.getElementById("startDate").value);
       const end = new Date(document.getElementById("endDate").value);
       const companyFilter = document.getElementById("companySelect").value;
+      const topN = document.getElementById("topN").value;
 
       const dataset = {};
       for (const month in rawData) {
         const monthDate = new Date(month + "-01");
         if (monthDate < start || monthDate > end) continue;
+
         for (const company in rawData[month]) {
           if (companyFilter !== "all" && company !== companyFilter) continue;
+
           const people = rawData[month][company]["people"] || {};
           const member = rawData[month][company]["member"] || false;
+
           for (const person in people) {
             const val = people[person][filterType] || 0;
             const label = `${person} (${company})`;
@@ -122,12 +129,17 @@
         }
       }
 
-      const sortedEntries = Object.entries(dataset).sort((a, b) => b[1].value - a[1].value);
+      let sortedEntries = Object.entries(dataset).sort((a, b) => b[1].value - a[1].value);
+      if (topN !== "all") {
+        sortedEntries = sortedEntries.slice(0, parseInt(topN));
+      }
+
       const labels = sortedEntries.map(e => e[0]);
       const data = sortedEntries.map(e => e[1].value);
       const colors = sortedEntries.map(e => e[1].member ? "orange" : "deepskyblue");
 
       if (chart) chart.destroy();
+
       const ctx = document.getElementById("contribChart").getContext("2d");
       chart = new Chart(ctx, {
         type: "bar",
@@ -140,34 +152,21 @@
           }]
         },
         options: {
-          indexAxis: 'y',
           responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            y: {
-              ticks: {
-                color: 'white',
-                autoSkip: false
-              }
-            },
-            x: {
-              ticks: { color: 'white' },
-              beginAtZero: true
-            }
-          },
+          indexAxis: "y",
           plugins: {
             legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => `${ctx.parsed.x} ${filterType}`
-              }
-            },
             zoom: {
-              pan: { enabled: true, mode: 'y' },
+              pan: { enabled: true, mode: "y" },
               zoom: {
                 wheel: { enabled: true },
                 pinch: { enabled: true },
-                mode: 'y'
+                mode: "y"
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.parsed.x} ${filterType}`
               }
             }
           }
@@ -176,8 +175,14 @@
     }
 
     window.onload = async () => {
+      const defaultStart = new Date();
+      defaultStart.setMonth(defaultStart.getMonth() - 1);
+      document.getElementById("startDate").value = defaultStart.toISOString().slice(0, 10);
+      document.getElementById("endDate").value = new Date().toISOString().slice(0, 10);
+
       rawData = await fetchData();
       companyMap = await getCompanyMap();
+
       const companySelect = document.getElementById("companySelect");
       const companies = new Set();
       for (const month in rawData) {
@@ -191,6 +196,7 @@
         opt.textContent = c;
         companySelect.appendChild(opt);
       });
+
       applyFilters();
     };
   </script>
