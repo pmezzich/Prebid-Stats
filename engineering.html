@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -44,6 +43,7 @@
     }
     canvas {
       width: 100% !important;
+      height: 1000px !important;
     }
   </style>
 </head>
@@ -52,18 +52,12 @@
   <div>
     Filter by:
     <select id="filterType">
-      <option value="prs">Pull Requests</option>
       <option value="commits">Commits</option>
-      <option value="issues">Issues</option>
-      <option value="events">Events</option>
-      <option value="prs_merged"># of PR’s Merged</option>
-      <option value="code_volume">Code Volume</option>
+      <option value="lines_added">Lines Added</option>
+      <option value="lines_deleted">Lines Deleted</option>
     </select>
     From: <input type="date" id="startDate">
     To: <input type="date" id="endDate">
-    <select id="companySelect">
-      <option value="all">All Companies</option>
-    </select>
     Show Top:
     <select id="topSelect">
       <option value="5">Top 5</option>
@@ -93,56 +87,42 @@
     const db = firebase.database();
 
     let rawData = {};
-    let companyMap = {};
     let chart = null;
 
-    function fetchData() {
-      return db.ref("stats").once("value").then(snapshot => snapshot.val());
-    }
-
-    function getCompanyMap() {
-      return fetch("user_company_map.json").then(res => res.json());
+    async function fetchData() {
+      const snapshot = await db.ref("daily_stats").once("value");
+      return snapshot.val() || {};
     }
 
     function applyFilters() {
       const filterType = document.getElementById("filterType").value;
       const start = new Date(document.getElementById("startDate").value);
       const end = new Date(document.getElementById("endDate").value);
-      const companyFilter = document.getElementById("companySelect").value;
       const topLimit = document.getElementById("topSelect").value;
 
       const dataset = {};
-      for (const month in rawData) {
-        const monthDate = new Date(month + "-01");
-        if (monthDate < start || monthDate > end) continue;
+      for (const date in rawData) {
+        const d = new Date(date);
+        if (d < start || d > end) continue;
 
-        for (const company in rawData[month]) {
-          if (companyFilter !== "all" && company !== companyFilter) continue;
-
-          const people = rawData[month][company]["people"] || {};
-          const member = rawData[month][company]["member"] || false;
-
-          for (const person in people) {
-            const val = people[person][filterType] || 0;
-            const label = `${person} (${company})`;
-            if (!dataset[label]) {
-              dataset[label] = { value: 0, member };
-            }
-            dataset[label].value += val;
+        for (const person in rawData[date]) {
+          const entry = rawData[date][person];
+          const key = person + " (" + entry.company + ")";
+          if (!dataset[key]) {
+            dataset[key] = { value: 0, member: entry.member };
           }
+          dataset[key].value += entry[filterType] || 0;
         }
       }
 
-      let sortedEntries = Object.entries(dataset).sort((a, b) => b[1].value - a[1].value);
-      if (topLimit !== "all") {
-        sortedEntries = sortedEntries.slice(0, parseInt(topLimit));
-      }
-      const labels = sortedEntries.map(e => e[0]);
-      const data = sortedEntries.map(e => e[1].value);
-      const colors = sortedEntries.map(e => e[1].member ? "orange" : "deepskyblue");
+      let sorted = Object.entries(dataset).sort((a, b) => b[1].value - a[1].value);
+      if (topLimit !== "all") sorted = sorted.slice(0, parseInt(topLimit));
+
+      const labels = sorted.map(e => e[0]);
+      const data = sorted.map(e => e[1].value);
+      const colors = sorted.map(e => e[1].member ? "orange" : "deepskyblue");
 
       if (chart) chart.destroy();
-
       const ctx = document.getElementById("contribChart").getContext("2d");
       chart = new Chart(ctx, {
         type: "bar",
@@ -162,7 +142,7 @@
             legend: { display: false },
             tooltip: {
               callbacks: {
-                label: (ctx) => `${ctx.parsed.x} ${filterType}`
+                label: ctx => `${ctx.parsed.x} ${filterType}`
               }
             },
             zoom: {
@@ -185,27 +165,10 @@
 
     window.onload = async () => {
       rawData = await fetchData();
-      companyMap = await getCompanyMap();
-
-      const companySelect = document.getElementById("companySelect");
-      const companies = new Set();
-      for (const month in rawData) {
-        for (const company in rawData[month]) {
-          companies.add(company);
-        }
-      }
-      [...companies].sort().forEach(c => {
-        const opt = document.createElement("option");
-        opt.value = c;
-        opt.textContent = c;
-        companySelect.appendChild(opt);
-      });
-
       const defaultStart = new Date();
       defaultStart.setMonth(defaultStart.getMonth() - 1);
       document.getElementById("startDate").value = defaultStart.toISOString().slice(0, 10);
       document.getElementById("endDate").value = new Date().toISOString().slice(0, 10);
-
       applyFilters();
     };
   </script>
