@@ -49,7 +49,28 @@
 </head>
 <body>
   <h2><i>Prebid Engineering</i> - People View</h2>
+  
   <div>
+    Filter by:
+    <select id="filterType">
+      <option value="commits">Commits</option>
+      <option value="lines_added">Lines Added</option>
+      <option value="lines_deleted">Lines Deleted</option>
+    </select>
+    From: <input type="date" id="startDate">
+    To: <input type="date" id="endDate">
+    Show Top:
+    <select id="topSelect">
+      <option value="5">Top 5</option>
+      <option value="10">Top 10</option>
+      <option value="20">Top 20</option>
+      <option value="30">Top 30</option>
+      <option value="50" selected>Top 50</option>
+      <option value="all">All</option>
+    </select>
+    <button onclick="applyFilters()">Apply Filters</button>
+  </div>
+
     Filter by:
     <select id="filterType">
       <option value="commits">Commits</option>
@@ -107,7 +128,11 @@
 
         for (const person in rawData[date]) {
           const entry = rawData[date][person];
-          const key = person + " (" + entry.company + ")";
+          
+          let company = entry.company || "Independent Dev";
+          if (company.toLowerCase() === "unknown") company = "Independent Dev";
+          const key = person + " (" + company + ")";
+    
           if (!dataset[key]) {
             dataset[key] = { value: 0, member: entry.member };
           }
@@ -115,7 +140,20 @@
         }
       }
 
-      let sorted = Object.entries(dataset).sort((a, b) => b[1].value - a[1].value);
+      let 
+      let counter = 1;
+      const renamed = {};
+      for (let [key, val] of Object.entries(dataset)) {
+        if (key.includes("Independent Dev")) {
+          const newKey = `Independent Dev ${counter}`;
+          renamed[newKey] = val;
+          counter++;
+        } else {
+          renamed[key] = val;
+        }
+      }
+      sorted = Object.entries(renamed).sort((a, b) => b[1].value - a[1].value);
+    
       if (topLimit !== "all") sorted = sorted.slice(0, parseInt(topLimit));
 
       const labels = sorted.map(e => e[0]);
