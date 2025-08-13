@@ -52,6 +52,11 @@
   <div>
     Filter by:
     <select id="filterType">
+    View:
+    <select id="viewMode">
+      <option value="people" selected>People</option>
+      <option value="companies">Companies</option>
+    </select>
       <option value="commits">Commits</option>
       <option value="issues">Issues Created</option>
       <option value="prs_created">PRs Created</option>
@@ -83,7 +88,7 @@
 
   <script>
     const firebaseConfig = {
-      databaseURL: "https://prebid-graphs-default-rtdb.firebaseio.com"
+      databaseURL: "https://prebid-board-dashboard-default-rtdb.firebaseio.com"
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
@@ -101,35 +106,46 @@
       const start = new Date(document.getElementById("startDate").value);
       const end = new Date(document.getElementById("endDate").value);
       const topLimit = document.getElementById("topSelect").value;
+      const viewMode = document.getElementById("viewMode").value; // people | companies
 
       const dataset = {};
       for (const date in rawData) {
         const d = new Date(date);
-        if (d < start || d > end) continue;
+        if (isNaN(d) || d < start || d > end) continue;
 
         for (const person in rawData[date]) {
           const entry = rawData[date][person];
           let company = entry.company || "Independent Dev";
-          if (company.toLowerCase() === "unknown") company = "Independent Dev";
-          const key = person + " (" + company + ")";
+          if (typeof company === "string" && company.toLowerCase() === "unknown") company = "Independent Dev";
+
+          const key = (viewMode === "companies")
+            ? company
+            : (person + " (" + company + ")");
+
           if (!dataset[key]) {
-            dataset[key] = { value: 0, member: entry.member };
+            dataset[key] = { value: 0, member: !!entry.member };
+          } else {
+            dataset[key].member = dataset[key].member || !!entry.member;
           }
           dataset[key].value += entry[filterType] || 0;
         }
       }
 
-      // Rename independent devs sequentially
-      let counter = 1;
-      const renamed = {};
-      for (let [key, val] of Object.entries(dataset)) {
-        if (key.includes("Independent Dev")) {
-          const newKey = `Independent Dev ${counter}`;
-          renamed[newKey] = val;
-          counter++;
-        } else {
-          renamed[key] = val;
+      // Rename independent devs only in People view
+      let renamed = {};
+      if (viewMode === "people") {
+        let counter = 1;
+        for (let [key, val] of Object.entries(dataset)) {
+          if (key.includes("Independent Dev")) {
+            const newKey = `Independent Dev ${counter}`;
+            renamed[newKey] = val;
+            counter++;
+          } else {
+            renamed[key] = val;
+          }
         }
+      } else {
+        renamed = dataset;
       }
 
       let sorted = Object.entries(renamed).sort((a, b) => b[1].value - a[1].value);
@@ -146,7 +162,7 @@
         data: {
           labels,
           datasets: [{
-            label: filterType,
+            label: filterType + " (" + (viewMode === "companies" ? "by company" : "by person") + ")",
             data,
             backgroundColor: colors
           }]
