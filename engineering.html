@@ -49,14 +49,15 @@
 </head>
 <body>
   <h2><i>Prebid Engineering</i> - People View</h2>
+  
   <div>
-    Filter by:
-    <select id="filterType">
     View:
     <select id="viewMode">
       <option value="people" selected>People</option>
       <option value="companies">Companies</option>
     </select>
+    Filter by:
+    <select id="filterType">
       <option value="commits">Commits</option>
       <option value="issues">Issues Created</option>
       <option value="prs_created">PRs Created</option>
@@ -77,6 +78,7 @@
     <button onclick="applyFilters()">Apply Filters</button>
   </div>
 
+
   <div id="chartContainer">
     <canvas id="contribChart"></canvas>
   </div>
@@ -93,6 +95,19 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
+    // Convert Firebase-safe keys back to original usernames for display
+    function unsanitizeKey(text) {
+      if (!text || typeof text !== "string") return text;
+      return text
+        .replaceAll("(dot)", ".")
+        .replaceAll("(dollar)", "$")
+        .replaceAll("(hash)", "#")
+        .replaceAll("(lbracket)", "[")
+        .replaceAll("(rbracket)", "]")
+        .replaceAll("(slash)", "/");
+    }
+
+
     let rawData = {};
     let chart = null;
 
@@ -101,100 +116,92 @@
       return snapshot.val() || {};
     }
 
-    function applyFilters() {
-      const filterType = document.getElementById("filterType").value;
-      const start = new Date(document.getElementById("startDate").value);
-      const end = new Date(document.getElementById("endDate").value);
-      const topLimit = document.getElementById("topSelect").value;
-      const viewMode = document.getElementById("viewMode").value; // people | companies
+    
+function applyFilters() {
+  const filterType = document.getElementById("filterType").value;
+  const start = new Date(document.getElementById("startDate").value);
+  const end = new Date(document.getElementById("endDate").value);
+  const topLimit = document.getElementById("topSelect").value;
+  const viewMode = document.getElementById("viewMode").value; // people | companies
 
-      const dataset = {};
-      for (const date in rawData) {
-        const d = new Date(date);
-        if (isNaN(d) || d < start || d > end) continue;
+  const dataset = {};
+  for (const date in rawData) {
+    const d = new Date(date);
+    if (isNaN(d) || d < start || d > end) continue;
 
-        for (const person in rawData[date]) {
-          const entry = rawData[date][person];
-          let company = entry.company || "Independent Dev";
-          if (typeof company === "string" && company.toLowerCase() === "unknown") company = "Independent Dev";
+    for (const personKey in rawData[date]) {
+      const entry = rawData[date][personKey];
+      // Prefer the original unsanitized username provided by backend
+      const username = entry.username ? entry.username : unsanitizeKey(personKey);
 
-          const key = (viewMode === "companies")
-            ? company
-            : (person + " (" + company + ")");
+      // Normalize company
+      let company = entry.company || "Independent Dev";
+      if (typeof company === "string" && company.toLowerCase() === "unknown") company = "Independent Dev";
 
-          if (!dataset[key]) {
-            dataset[key] = { value: 0, member: !!entry.member };
-          } else {
-            dataset[key].member = dataset[key].member || !!entry.member;
-          }
-          dataset[key].value += entry[filterType] || 0;
-        }
-      }
+      // Determine aggregation key based on view mode
+      const key = (viewMode === "companies")
+        ? company
+        : (username + " (" + company + ")");
 
-      // Rename independent devs only in People view
-      let renamed = {};
-      if (viewMode === "people") {
-        let counter = 1;
-        for (let [key, val] of Object.entries(dataset)) {
-          if (key.includes("Independent Dev")) {
-            const newKey = `Independent Dev ${counter}`;
-            renamed[newKey] = val;
-            counter++;
-          } else {
-            renamed[key] = val;
-          }
-        }
+      if (!dataset[key]) {
+        dataset[key] = { value: 0, member: !!entry.member };
       } else {
-        renamed = dataset;
+        dataset[key].member = dataset[key].member || !!entry.member;
       }
+      dataset[key].value += entry[filterType] || 0;
+    }
+  }
 
-      let sorted = Object.entries(renamed).sort((a, b) => b[1].value - a[1].value);
-      if (topLimit !== "all") sorted = sorted.slice(0, parseInt(topLimit));
+  // Do NOT rename independent devs anymore; show actual usernames.
+  const renamed = dataset;
 
-      const labels = sorted.map(e => e[0]);
-      const data = sorted.map(e => e[1].value);
-      const colors = sorted.map(e => e[1].member ? "orange" : "deepskyblue");
+  let sorted = Object.entries(renamed).sort((a, b) => b[1].value - a[1].value);
+  if (topLimit !== "all") sorted = sorted.slice(0, parseInt(topLimit));
 
-      if (chart) chart.destroy();
-      const ctx = document.getElementById("contribChart").getContext("2d");
-      chart = new Chart(ctx, {
-        type: "bar",
-        data: {
-          labels,
-          datasets: [{
-            label: filterType + " (" + (viewMode === "companies" ? "by company" : "by person") + ")",
-            data,
-            backgroundColor: colors
-          }]
+  const labels = sorted.map(e => e[0]);
+  const data = sorted.map(e => e[1].value);
+  const colors = sorted.map(e => e[1].member ? "orange" : "deepskyblue");
+
+  if (chart) chart.destroy();
+  const ctx = document.getElementById("contribChart").getContext("2d");
+  chart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: filterType + " (" + (viewMode === "companies" ? "by company" : "by person") + ")",
+        data,
+        backgroundColor: colors
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.parsed.x} ${filterType}`
+          }
         },
-        options: {
-          indexAxis: 'y',
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: ctx => `${ctx.parsed.x} ${filterType}`
-              }
-            },
-            zoom: {
-              pan: { enabled: true, mode: 'y' },
-              zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'y' }
-            }
-          },
-          scales: {
-            y: {
-              ticks: {
-                autoSkip: false,
-                maxRotation: 0,
-                font: { size: 12 }
-              }
-            }
+        zoom: {
+          pan: { enabled: true, mode: 'y' },
+          zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'y' }
+        }
+      },
+      scales: {
+        y: {
+          ticks: {
+            autoSkip: false,
+            maxRotation: 0,
+            font: { size: 12 }
           }
         }
-      });
+      }
     }
+  });
+}
 
     window.onload = async () => {
       rawData = await fetchData();
