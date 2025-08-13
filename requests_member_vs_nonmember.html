@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Prebid Requests — Members vs Non‑Members</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
+  <style>
+    :root{
+      --bg:#0a2c42;
+      --card:#0f3b55;
+      --text:#fff;
+      --muted:#c9d6e2;
+      --member:#f59e0b;       /* orange */
+      --nonmember:#00bfff;    /* deepskyblue */
+      --accent:#3b82f6;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+      background:var(--bg);
+      color:var(--text);
+    }
+    header{
+      display:flex;align-items:center;gap:12px;
+      padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.12);
+    }
+    header h1{font-size:20px;margin:0;opacity:.95}
+    .back-btn{
+      display:inline-flex;align-items:center;gap:8px;
+      background:transparent;border:1px solid rgba(255,255,255,.3);
+      color:var(--text); padding:8px 12px;border-radius:10px;cursor:pointer;
+      text-decoration:none;
+    }
+    .controls{
+      display:flex;flex-wrap:wrap;gap:12px;align-items:center;
+      padding:14px 20px;
+    }
+    .pill{
+      background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.15);
+      border-radius:10px;padding:8px 10px;min-width:160px;
+    }
+    select{
+      background:transparent;color:var(--text);border:none;width:100%;
+      font-size:14px;outline:none;
+    }
+    .toggle{
+      display:flex;gap:8px;align-items:center;
+    }
+    .toggle button{
+      border:1px solid rgba(255,255,255,.3);
+      background:transparent;color:var(--text);
+      padding:8px 12px;border-radius:10px;cursor:pointer
+    }
+    .toggle button.active{background:var(--accent);border-color:var(--accent)}
+    .stats{
+      display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+      gap:12px;padding:0 20px 6px 20px;
+    }
+    .stat{
+      background:var(--card);border-radius:12px;padding:14px;border:1px solid rgba(255,255,255,.08);
+    }
+    .stat h3{margin:0;font-size:26px}
+    .stat p{margin:4px 0 0 0;color:var(--muted);font-size:13px}
+    .legend{padding:8px 20px;color:var(--muted);font-size:13px}
+    .legend .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+    .grid{
+      padding:10px 20px 30px 20px;
+      display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;
+    }
+    .card{
+      background:var(--card);border-radius:12px;padding:14px;border:1px solid rgba(255,255,255,.08);
+    }
+    .card a{color:#93c5fd;text-decoration:none}
+    .meta{font-size:13px;color:var(--muted);margin-top:6px}
+    .status{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.2)}
+    .status.member{color:var(--member);border-color:var(--member)}
+    .status.nonmember{color:var(--nonmember);border-color:var(--nonmember)}
+    .row{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px}
+    .search{flex:1}
+    .search input{
+      width:100%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);
+      color:var(--text);padding:8px 12px;border-radius:10px;outline:none;
+    }
+    .empty{grid-column:1/-1;text-align:center;opacity:.7;padding:30px 0}
+    @media(max-width:520px){.row{flex-direction:column;align-items:stretch}}
+  </style>
+</head>
+<body>
+  <header>
+    <a class="back-btn" href="engineering.html"><i class="fa-solid fa-arrow-left"></i> Back to Engineering</a>
+    <h1>Requests — Members vs Non‑Members</h1>
+  </header>
+
+  <div class="controls">
+    <div class="row" style="width:100%">
+      <div class="toggle">
+        <button id="btn-members" class="active"><i class="fa-solid fa-user-check"></i> Members</button>
+        <button id="btn-nonmembers"><i class="fa-solid fa-user-times"></i> Non‑Members</button>
+      </div>
+      <div class="search">
+        <input id="search" type="text" placeholder="Search title, author, company…">
+      </div>
+      <div class="pill" style="max-width:220px">
+        <select id="sort">
+          <option value="newest">Sort: Newest</option>
+          <option value="oldest">Sort: Oldest</option>
+          <option value="company">Sort: Company</option>
+          <option value="author">Sort: Author</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><h3 id="stat-total">0</h3><p>Total requests</p></div>
+    <div class="stat"><h3 id="stat-members">0</h3><p>Member requests</p></div>
+    <div class="stat"><h3 id="stat-nonmembers">0</h3><p>Non‑member requests</p></div>
+    <div class="stat"><h3 id="stat-companies">0</h3><p>Unique companies</p></div>
+  </div>
+
+  <div class="legend">
+    <span class="dot" style="background:var(--member)"></span> Member
+    &nbsp;&nbsp;&nbsp;
+    <span class="dot" style="background:var(--nonmember)"></span> Non‑member
+  </div>
+
+  <div id="grid" class="grid">
+    <div class="empty">Loading…</div>
+  </div>
+
+<script>
+  let all = [];
+  let mode = 'member'; // 'member' | 'non-member'
+  const grid = document.getElementById('grid');
+  const q = (s)=>document.querySelector(s);
+
+  function fmtDate(ts){ try { return new Date(ts).toLocaleString(); } catch { return ts; } }
+
+  function render(){
+    const term = q('#search').value.trim().toLowerCase();
+    const sort = q('#sort').value;
+    const rows = all
+      .filter(r => r.status === mode)
+      .filter(r => (r.title + ' ' + r.author + ' ' + r.company).toLowerCase().includes(term))
+      .sort((a,b)=>{
+        if (sort==='oldest') return new Date(a.timestamp)-new Date(b.timestamp);
+        if (sort==='company') return (a.company||'').localeCompare(b.company||'');
+        if (sort==='author') return (a.author||'').localeCompare(b.author||'');
+        return new Date(b.timestamp)-new Date(a.timestamp);
+      });
+
+    // Stats
+    const total = all.length;
+    const members = all.filter(r=>r.status==='member').length;
+    const nonmembers = all.filter(r=>r.status==='non-member').length;
+    const companies = new Set(all.map(r=>r.company)).size;
+    q('#stat-total').textContent = total;
+    q('#stat-members').textContent = members;
+    q('#stat-nonmembers').textContent = nonmembers;
+    q('#stat-companies').textContent = companies;
+
+    grid.innerHTML = rows.length ? '' : '<div class="empty">No requests found</div>';
+    rows.forEach(r => {
+      const el = document.createElement('div');
+      el.className = 'card';
+      el.innerHTML = `
+        <div class="row">
+          <div><a href="${r.url}" target="_blank">${r.title}</a></div>
+          <span class="status ${r.status==='member'?'member':'nonmember'}">
+            <i class="fa-solid ${r.status==='member'?'fa-user-check':'fa-user-times'}"></i>
+            ${r.status.replace('-', ' ')}
+          </span>
+        </div>
+        <div class="meta"><i class="fa-solid fa-user"></i> ${r.author || 'Unknown'} ·
+          <i class="fa-solid fa-building"></i> ${r.company || 'Unknown'} ·
+          <i class="fa-solid fa-clock"></i> ${fmtDate(r.timestamp)}
+        </div>
+      `;
+      grid.appendChild(el);
+    });
+  }
+
+  function setMode(m){
+    mode = m;
+    q('#btn-members').classList.toggle('active', m==='member');
+    q('#btn-nonmembers').classList.toggle('active', m==='non-member');
+    render();
+  }
+
+  // events
+  q('#btn-members').addEventListener('click', ()=>setMode('member'));
+  q('#btn-nonmembers').addEventListener('click', ()=>setMode('non-member'));
+  q('#search').addEventListener('input', render);
+  q('#sort').addEventListener('change', render);
+
+  // load data
+  fetch('requests.json')
+    .then(r=>r.json())
+    .then(json=>{ all = json; render(); })
+    .catch(e=>{ grid.innerHTML = '<div class="empty">Failed to load requests.json</div>'; console.error(e); });
+</script>
+</body>
+</html>
