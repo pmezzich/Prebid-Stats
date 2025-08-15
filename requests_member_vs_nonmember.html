@@ -59,6 +59,13 @@
       <div class="search">
         <input id="search" type="text" placeholder="Search title, author, company…">
       </div>
+      
+      <div class="pill" style="max-width:260px">
+        <select id="repoFilter">
+          <option value="__all__">Repo: All</option>
+        </select>
+      </div>
+
       <div class="pill" style="max-width:240px">
         <select id="sort">
           <option value="newest">Sort: Newest</option>
@@ -71,7 +78,7 @@
   </div>
 
   <div class="stats">
-    <div class="stat"><h3 id="stat-total">0</h3><p>Total requests (month)</p></div>
+    <div class="stat"><h3 id="stat-total">0</h3><p>Total requests (week)</p></div>
     <div class="stat"><h3 id="stat-members">0</h3><p>Member requests</p></div>
     <div class="stat"><h3 id="stat-nonmembers">0</h3><p>Non‑member requests</p></div>
     <div class="stat"><h3 id="stat-companies">0</h3><p>Unique companies</p></div>
@@ -95,10 +102,21 @@
 
   let all = []; // flattened list of request entries
   let mode = 'all'; // 'all' | 'member' | 'non-member'
+  let repoFilter = '__all__'; // repo name or __all__
   const grid = document.getElementById('grid');
   const q = (s)=>document.querySelector(s);
 
   function fmtDate(ts){ try { return new Date(ts).toLocaleString(); } catch { return ts; } }
+
+  function populateRepos(list){
+    const sel = q('#repoFilter');
+    const set = new Set();
+    list.forEach(r => { if (r.repo) set.add(r.repo); });
+    sel.innerHTML = '<option value="__all__">Repo: All</option>' + Array.from(set).sort().map(name => {
+      return `<option value="${name}">${name}</option>`;
+    }).join('');
+  }
+
 
   function flattenDaily(snapshotVal){
     // snapshotVal: { "YYYY-MM-DD": { id: {title, url, author, company, status, timestamp, ...}, ... }, ...}
@@ -123,12 +141,14 @@
     q('#stat-companies').textContent = companies;
   }
 
-  function render(){
+  
+function render(){
     const term = q('#search').value.trim().toLowerCase();
     const sort = q('#sort').value;
     const rows = all
       .filter(r => mode==='all' ? true : r.status === mode)
-      .filter(r => (r.title + ' ' + r.author + ' ' + r.company).toLowerCase().includes(term))
+      .filter(r => repoFilter==='__all__' ? true : (r.repo === repoFilter))
+      .filter(r => (r.title + ' ' + r.author + ' ' + r.company + ' ' + (r.repo||'')).toLowerCase().includes(term))
       .sort((a,b)=>{
         if (sort==='oldest') return new Date(a.timestamp)-new Date(b.timestamp);
         if (sort==='company') return (a.company||'').localeCompare(b.company||'');
@@ -142,13 +162,17 @@
     rows.forEach(r => {
       const el = document.createElement('div');
       el.className = 'card';
+      const repoBadge = r.repo ? `<span class="status" style="margin-left:8px;border-color:rgba(255,255,255,.25);color:#93c5fd">📦 ${r.repo}</span>` : '';
       el.innerHTML = `
         <div class="row">
           <div><a href="${r.url}" target="_blank">${r.title}</a></div>
+          <div>
           <span class="status ${r.status==='member'?'member':'nonmember'}">
             <i class="fa-solid ${r.status==='member'?'fa-user-check':'fa-user-times'}"></i>
             ${r.status.replace('-', ' ')}
           </span>
+          ${repoBadge}
+          </div>
         </div>
         <div class="meta"><i class="fa-solid fa-user"></i> ${r.author || 'Unknown'} ·
           <i class="fa-solid fa-building"></i> ${r.company || 'Unknown'} ·
@@ -173,12 +197,14 @@
   q('#btn-nonmembers').addEventListener('click', ()=>setMode('non-member'));
   q('#search').addEventListener('input', render);
   q('#sort').addEventListener('change', render);
+  q('#repoFilter').addEventListener('change', (e)=>{ repoFilter = e.target.value; render(); });
 
   // live subscribe to last month under /daily_requests
   function subscribe(){
     const ref = db.ref('daily_requests');
     ref.on('value', snap => {
       all = flattenDaily(snap.val());
+      populateRepos(all);
       render();
     }, err => {
       console.error(err);
